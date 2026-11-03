@@ -18,11 +18,11 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -45,23 +45,27 @@ jobs:
       - name: Lint Firefox build (addons-linter)
         run: npm run lint:firefox
 
-      - uses: actions/upload-artifact@v4
+      # upload-artifact skips hidden folders such as .output, so collect the zips first.
+      - name: Collect zips
+        run: mkdir -p dist && cp .output/*.zip dist/
+
+      - uses: actions/upload-artifact@v7
         with:
           name: extension-zips
-          path: .output/*.zip
+          path: dist/*.zip
           if-no-files-found: error
 
   release:
     needs: check
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     concurrency:
       group: release
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Read version
         id: version
@@ -80,7 +84,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: steps.exists.outputs.skip == 'false'
         with:
           name: extension-zips
