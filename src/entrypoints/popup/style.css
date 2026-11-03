@@ -312,6 +312,7 @@ a.bc-button { display: inline-flex; align-items: center; text-decoration: none; 
 /* ---------- queue: styled after the release tracklist ---------- */
 
 .track_list {
+  position: relative; /* rows' offsetTop is measured from the list, for scrolling to the current one */
   list-style: none;
   margin: 4px 0 0;
   padding: 0 0 4px;

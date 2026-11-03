@@ -76,6 +76,10 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 ## Release notes
 
+### 0.2.2
+
+The popup header no longer scrolls out of view when the queue jumps to the current release.
+
 ### 0.2.1
 
 First public release: play a Bandcamp discover page in order or shuffled, one track per release or full releases, wishlist hearts, update after page reloads.

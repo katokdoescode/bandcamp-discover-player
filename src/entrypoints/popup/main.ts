@@ -246,7 +246,16 @@ function renderQueue(): void {
     list.append(li);
   });
 
-  (currentRow as HTMLElement | null)?.scrollIntoView({ block: firstRender ? "center" : "nearest" });
+  if (currentRow) revealInList(list, currentRow, firstRender);
+}
+
+/** Scrolls only the queue (scrollIntoView would also scroll the whole popup and hide its header). */
+function revealInList(list: HTMLElement, row: HTMLElement, center: boolean): void {
+  const top = row.offsetTop;
+  const bottom = top + row.offsetHeight;
+  if (center) list.scrollTop = top - (list.clientHeight - row.offsetHeight) / 2;
+  else if (top < list.scrollTop) list.scrollTop = top;
+  else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
 }
 
 // ---------- controls ----------

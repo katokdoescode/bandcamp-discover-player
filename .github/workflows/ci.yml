@@ -65,8 +65,9 @@ jobs:
       group: release
       cancel-in-progress: false
     env:
-      # Store submission runs only once the AMO API keys are added as repository secrets.
+      # Store submissions run only once their API keys are added as repository secrets.
       HAS_AMO_KEYS: ${{ secrets.FIREFOX_JWT_ISSUER != '' && secrets.FIREFOX_JWT_SECRET != '' }}
+      HAS_CWS_KEYS: ${{ secrets.CHROME_EXTENSION_ID != '' && secrets.CHROME_PUBLISHER_ID != '' && secrets.CHROME_SERVICE_ACCOUNT_EMAIL != '' && secrets.CHROME_SERVICE_ACCOUNT_KEY != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -105,13 +106,13 @@ jobs:
             --generate-notes
 
       - uses: actions/setup-node@v7
-        if: steps.exists.outputs.skip == 'false' && env.HAS_AMO_KEYS == 'true'
+        if: steps.exists.outputs.skip == 'false' && (env.HAS_AMO_KEYS == 'true' || env.HAS_CWS_KEYS == 'true')
         with:
           node-version: 24
           cache: npm
 
       - name: Install
-        if: steps.exists.outputs.skip == 'false' && env.HAS_AMO_KEYS == 'true'
+        if: steps.exists.outputs.skip == 'false' && (env.HAS_AMO_KEYS == 'true' || env.HAS_CWS_KEYS == 'true')
         run: npm ci
 
       - name: Submit to addons.mozilla.org
@@ -128,3 +129,19 @@ jobs:
             --firefox-compatibility firefox \
             --firefox-jwt-issuer "$FIREFOX_JWT_ISSUER" \
             --firefox-jwt-secret "$FIREFOX_JWT_SECRET"
+
+      - name: Submit to Chrome Web Store
+        if: steps.exists.outputs.skip == 'false' && env.HAS_CWS_KEYS == 'true'
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CHROME_SERVICE_ACCOUNT_EMAIL: ${{ secrets.CHROME_SERVICE_ACCOUNT_EMAIL }}
+          CHROME_SERVICE_ACCOUNT_KEY: ${{ secrets.CHROME_SERVICE_ACCOUNT_KEY }}
+        run: |
+          npx wxt submit \
+            --chrome-zip dist/*-chrome.zip \
+            --chrome-api-version v2 \
+            --chrome-extension-id "$CHROME_EXTENSION_ID" \
+            --chrome-publisher-id "$CHROME_PUBLISHER_ID" \
+            --chrome-service-account-client-email "$CHROME_SERVICE_ACCOUNT_EMAIL" \
+            --chrome-service-account-private-key "$CHROME_SERVICE_ACCOUNT_KEY"
