@@ -1,111 +1,110 @@
 # Discover Player for Bandcamp
 
-Браузерное расширение для Firefox и Chrome: проигрывает всю выдачу страницы
-`bandcamp.com/discover/...` — по порядку или шаффлом, по одному треку с релиза
-или релизы целиком. Плеер открывается по клику на иконку расширения и выглядит
-как плеер на странице релиза Bandcamp.
+A browser extension for Firefox and Chrome that plays everything on a
+`bandcamp.com/discover/...` page — in order or shuffled, one track per release
+or whole releases. The player opens from the toolbar icon and looks like the
+player on a Bandcamp release page.
 
-> Неофициальное расширение, не связано с Bandcamp. Использует внутренние API,
-> которыми пользуются страницы самого Bandcamp; если они изменятся, расширение
-> может перестать работать.
+> Unofficial; not affiliated with Bandcamp. It uses the internal APIs that
+> Bandcamp's own pages use, so it may break if Bandcamp changes them.
 
-## Возможности
+## Features
 
-- **play this page** — играет ровно те релизы, что показаны на открытой discover-странице
-  (включая подгруженные кнопкой «View more results»), дальше сам догружает следующие.
-- **one track per release** / **full releases** — один трек с релиза или релиз целиком.
-- **shuffle** — перемешивает релизы, треки внутри релиза идут по порядку.
-- После перезагрузки страницы (у `s=rand` выдача каждый раз новая) или смены фильтров
-  предлагает **update list**; текущий трек доигрывает.
-- ♡ wishlist для релизов и отдельных треков (красное — уже в вишлисте, повторный клик убирает).
-  Нужна открытая вкладка bandcamp.com с вашим логином; если её нет — предложит войти.
-- Музыка играет после закрытия окошка. Медиа-клавиши, в окошке — `Space`, `Shift+←/→`.
+- **play this page** — plays exactly the releases shown on the open discover page
+  (including those loaded with "View more results"), then keeps loading more.
+- **one track per release** / **full releases** — one track from each release, or every release in full.
+- **shuffle** — shuffles releases; tracks within a release stay in order.
+- After the page is reloaded (`s=rand` gives new results every time) or its filters
+  change, the player offers **update list**; the current track keeps playing.
+- ♡ wishlist for releases and single tracks (red when wishlisted, click again to remove).
+  Needs an open bandcamp.com tab where you are logged in; otherwise it offers to log in.
+- Music keeps playing after the popup closes. Media keys work; in the popup, `Space` and `Shift+←/→`.
 
-## Разработка
+## Development
 
-Нужен Node.js 22+.
+Requires Node.js 22+.
 
 ```bash
 npm install
 ```
 
 ```bash
-npm run dev            # Chrome с расширением и живой перезагрузкой
+npm run dev            # Chrome with the extension loaded and live reload
 ```
 
 ```bash
-npm run dev:firefox    # то же для Firefox
+npm run dev:firefox    # the same for Firefox
 ```
 
 ```bash
-npm run check          # типы, тесты, обе сборки, линтер Mozilla — то же, что CI
+npm run check          # types, tests, both builds and Mozilla's linter — same as CI
 ```
 
-Сборки появляются в `.output/chrome-mv3` и `.output/firefox-mv2`; `npm run zip` и
-`npm run zip:firefox` упаковывают их для магазинов (для Firefox ещё и архив исходников).
+Builds go to `.output/chrome-mv3` and `.output/firefox-mv2`; `npm run zip` and
+`npm run zip:firefox` package them for the stores (Firefox also gets a sources archive).
 
-Установить сборку вручную:
-- **Chrome:** `chrome://extensions` → режим разработчика → «Загрузить распакованное» → `.output/chrome-mv3`.
-- **Firefox:** `about:debugging#/runtime/this-firefox` → «Load Temporary Add-on…» → `.output/firefox-mv2/manifest.json`.
+To install a build by hand:
+- **Chrome:** `chrome://extensions` → Developer mode → "Load unpacked" → `.output/chrome-mv3`.
+- **Firefox:** `about:debugging#/runtime/this-firefox` → "Load Temporary Add-on…" → `.output/firefox-mv2/manifest.json`.
 
-## Как устроено
+## How it works
 
-Сделано на [WXT](https://wxt.dev) и TypeScript. Почти весь код общий; браузеры
-отличаются тем, где живёт плеер и как читается выдача страницы.
+Built with [WXT](https://wxt.dev) and TypeScript. Almost all code is shared; the
+browsers differ only in where the player lives and how the page's results are read.
 
 | | Firefox (MV2) | Chrome (MV3) |
 |---|---|---|
-| Где играет звук | постоянная фоновая страница | offscreen-документ; service worker только пересылает сообщения |
-| Как видна выдача страницы | `webRequest.filterResponseData` | обёртка `fetch` в контексте страницы (`world: "MAIN"`) |
-| Запросы от имени страницы | `content.fetch` | обычный `fetch` из content script |
+| Where audio plays | persistent background page | offscreen document; the service worker only relays messages |
+| How the page's results are seen | `webRequest.filterResponseData` | a `fetch` wrapper in the page's own world (`world: "MAIN"`) |
+| Requests made as the page | `content.fetch` | plain `fetch` from the content script |
 
-Chrome закрывает offscreen-документ примерно через 30 секунд тишины, поэтому
-состояние плеера сохраняется в `storage.session` и восстанавливается при следующем запуске.
+Chrome closes the offscreen document after about 30 seconds of silence, so the
+player's state is saved to `storage.session` and restored on the next start.
 
 ```
 src/
   entrypoints/
-    background.ts            фон: хост плеера в Firefox, service worker в Chrome
-    offscreen/               Chrome: документ со звуком и плеером
-    bandcamp.content.ts      данные страницы, запросы от её имени, вишлист
-    discover-hook.content.ts Chrome: перехват выдачи страницы
-    popup/                   интерфейс
+    background.ts            background: player host in Firefox, service worker in Chrome
+    offscreen/               Chrome: document with the audio element and the player
+    bandcamp.content.ts      page data, requests made as the page, wishlist
+    discover-hook.content.ts Chrome: reads the page's discover results
+    popup/                   user interface
   lib/
-    player.ts                очередь, режимы, шаффл, догрузка, вишлист
-    hosts/                   платформенные части плеера
-    discover-spec.ts         фильтры discover-страницы из URL
-    captures.ts              сборка выдачи страницы из её ответов
-    bandcamp.ts, page.ts     API Bandcamp и работа со страницей
+    player.ts                queue, modes, shuffle, paging, wishlist
+    hosts/                   browser-specific parts of the player
+    discover-spec.ts         discover page filters from the URL
+    captures.ts              builds the page's result list from its responses
+    bandcamp.ts, page.ts     Bandcamp API and page helpers
 tests/                       Vitest
 ```
 
-Используемые эндпоинты Bandcamp:
-- `POST /api/discover/1/discover_web` — выдача discover;
-- `GET /api/mobile/25/tralbum_details` — трек-лист релиза со ссылками на mp3-128;
-- `POST /collect_item_cb`, `/uncollect_item_cb` — вишлист, как кнопка на сайте.
+Bandcamp endpoints used:
+- `POST /api/discover/1/discover_web` — discover results;
+- `GET /api/mobile/25/tralbum_details` — a release's tracklist with mp3-128 links;
+- `POST /collect_item_cb`, `/uncollect_item_cb` — wishlist, same as the site's button.
 
-## Релизы
+## Releases
 
-CI (`.github/workflows/ci.yml`) на каждый push в `main` и pull request проверяет
-типы, запускает тесты, собирает обе версии и прогоняет линтер Mozilla.
+CI (`.github/workflows/ci.yml`) runs on every push to `main` and on pull requests:
+it typechecks, runs the tests, builds both versions and runs Mozilla's linter.
 
-После зелёной проверки на `main` автоматически создаётся GitHub Release с
-архивами для Chrome и Firefox (и исходниками для AMO) — если версии из
-`package.json` ещё нет среди релизов. Чтобы выпустить новую версию:
+After a green run on `main`, a GitHub Release with the Chrome and Firefox zips
+(and the sources archive for AMO) is created automatically — if the version in
+`package.json` has not been released yet. To ship a new version:
 
 ```bash
-npm version patch      # или minor / major — меняет версию в package.json
+npm version patch      # or minor / major — bumps the version in package.json
 ```
 
 ```bash
 git push --follow-tags
 ```
 
-Архивы из релиза загружаются в Chrome Web Store и на addons.mozilla.org.
-Firefox устанавливает только подписанные Mozilla расширения, поэтому zip из
-релиза — это то, что отправляется на подпись, а не файл для прямой установки.
+The release zips are what you upload to the Chrome Web Store and addons.mozilla.org.
+Firefox only installs extensions signed by Mozilla, so the Firefox zip is what you
+submit for signing, not a file for direct installation.
 
-## Конфиденциальность
+## Privacy
 
-Расширение ничего не собирает и никуда не отправляет, кроме запросов к Bandcamp.
-Подробнее — [PRIVACY.md](PRIVACY.md).
+The extension collects nothing and sends nothing anywhere except requests to Bandcamp.
+See [PRIVACY.md](PRIVACY.md).
