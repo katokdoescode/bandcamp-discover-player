@@ -8,6 +8,10 @@ export default defineConfig({
   autoIcons: {
     baseIconPath: "assets/icon.svg",
   },
+  // Readable output: store reviewers can follow the shipped code directly.
+  vite: () => ({
+    build: { minify: false },
+  }),
   manifest: ({ browser }) => ({
     name: "Discover Player for Bandcamp",
     description: "Play every track (or whole releases) from a Bandcamp discover page, in order or shuffled.",

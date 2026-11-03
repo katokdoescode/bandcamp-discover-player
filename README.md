@@ -47,6 +47,22 @@ To install a build by hand:
 - **Chrome:** `chrome://extensions` → Developer mode → "Load unpacked" → `.output/chrome-mv3`.
 - **Firefox:** `about:debugging#/runtime/this-firefox` → "Load Temporary Add-on…" → `.output/firefox-mv2/manifest.json`.
 
+### Building the Firefox package from source (for add-on reviewers)
+
+Tested on macOS and Ubuntu 24.04 with Node.js 24 and npm 11.
+
+```bash
+npm ci
+```
+
+```bash
+npm run zip:firefox
+```
+
+The unpacked extension is written to `.output/firefox-mv2/` and the package to
+`.output/bandcamp-discover-player-<version>-firefox.zip`. The build is not minified
+and is reproducible: building twice gives identical files.
+
 ## How it works
 
 Built with [WXT](https://wxt.dev) and TypeScript. Almost all code is shared; the

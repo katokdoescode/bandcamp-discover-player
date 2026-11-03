@@ -2,7 +2,16 @@
   "name": "bandcamp-discover-player",
   "displayName": "Discover Player for Bandcamp",
   "description": "Play every track (or whole releases) from a Bandcamp discover page, in order or shuffled.",
-  "version": "0.2.0",
+  "version": "0.2.1",
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/katokdoescode/bandcamp-discover-player.git"
+  },
+  "homepage": "https://github.com/katokdoescode/bandcamp-discover-player",
+  "bugs": {
+    "url": "https://github.com/katokdoescode/bandcamp-discover-player/issues"
+  },
   "private": true,
   "type": "module",
   "scripts": {

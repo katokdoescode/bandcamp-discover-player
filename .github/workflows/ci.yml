@@ -64,6 +64,9 @@ jobs:
     concurrency:
       group: release
       cancel-in-progress: false
+    env:
+      # Store submission runs only once the AMO API keys are added as repository secrets.
+      HAS_AMO_KEYS: ${{ secrets.FIREFOX_JWT_ISSUER != '' && secrets.FIREFOX_JWT_SECRET != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -100,3 +103,28 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "$TAG" \
             --generate-notes
+
+      - uses: actions/setup-node@v7
+        if: steps.exists.outputs.skip == 'false' && env.HAS_AMO_KEYS == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        if: steps.exists.outputs.skip == 'false' && env.HAS_AMO_KEYS == 'true'
+        run: npm ci
+
+      - name: Submit to addons.mozilla.org
+        if: steps.exists.outputs.skip == 'false' && env.HAS_AMO_KEYS == 'true'
+        env:
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+        run: |
+          npx wxt submit \
+            --firefox-zip dist/*-firefox.zip \
+            --firefox-sources-zip dist/*-sources.zip \
+            --firefox-extension-id "discover-player@bandcamp-streaming-plugin" \
+            --firefox-channel listed \
+            --firefox-compatibility firefox \
+            --firefox-jwt-issuer "$FIREFOX_JWT_ISSUER" \
+            --firefox-jwt-secret "$FIREFOX_JWT_SECRET"
