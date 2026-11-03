@@ -1,0 +1,7 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "noUnusedLocals": true
+  },
+  "include": [".wxt/wxt.d.ts", "src", "tests", "*.config.ts"]
+}

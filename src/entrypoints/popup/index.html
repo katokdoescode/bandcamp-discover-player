@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Discover Player</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="menubar">
+    <a class="logo" href="https://bandcamp.com/discover" target="_blank" title="Bandcamp discover">
+      <span class="logo-mark"></span><span class="logo-text">discover player</span>
+    </a>
+    <span class="source" id="source"></span>
+  </header>
+
+  <section class="banner" id="banner" hidden>
+    <div class="banner-text">
+      <div class="banner-label" id="bannerLabel">this page</div>
+      <div class="banner-spec" id="bannerSpec"></div>
+    </div>
+    <button class="bc-button" id="loadBtn">play this page</button>
+  </section>
+
+  <section class="notice" id="notice" hidden>
+    <span>Log in to Bandcamp to save releases and tracks to your wishlist.</span>
+    <a class="bc-button" href="https://bandcamp.com/login" target="_blank">log in</a>
+    <button class="close" id="noticeClose" title="dismiss">×</button>
+  </section>
+
+  <section class="empty" id="empty" hidden>
+    <p>Open a genre on <a href="https://bandcamp.com/discover" target="_blank">bandcamp.com/discover</a>,
+      then click the extension icon and hit <b>play this page</b>.</p>
+  </section>
+
+  <section class="now" id="now" hidden>
+    <div class="now-head">
+      <a id="artLink" target="_blank"><img class="art" id="art" alt=""></a>
+      <div class="now-meta">
+        <h2 class="trackTitle" id="relTitle"></h2>
+        <h3>by <a id="relArtist" target="_blank"></a></h3>
+        <button class="wishlist-link" id="relWish"><span class="wish-icon"></span><span class="label">Wishlist</span></button>
+      </div>
+    </div>
+
+    <div class="inline_player">
+      <button class="playbutton" id="playBtn" title="play/pause"><span class="icon"></span></button>
+      <div class="track_info">
+        <div class="info_line">
+          <span class="title" id="trackTitle"></span>
+          <button class="wish" id="trackWish"></button>
+          <span class="time"><span id="timeElapsed">00:00</span> / <span id="timeTotal">00:00</span></span>
+        </div>
+        <div class="progress_row">
+          <div class="progbar" id="progbar">
+            <div class="progbar_empty"><div class="progbar_fill" id="progFill"></div></div>
+            <div class="thumb" id="thumb"></div>
+          </div>
+          <button class="prevbutton" id="prevBtn" title="previous"></button>
+          <button class="nextbutton" id="nextBtn" title="next"></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <nav class="options" id="options" hidden>
+    <div class="tabs" role="tablist">
+      <button class="tab" data-mode="track" role="tab">one track per release</button>
+      <button class="tab" data-mode="album" role="tab">full releases</button>
+    </div>
+    <label class="shuffle" title="shuffle releases">
+      <input type="checkbox" id="shuffle">
+      <span class="shuffle-icon"></span>shuffle
+    </label>
+  </nav>
+
+  <div class="status" id="status" hidden></div>
+
+  <ol class="track_list" id="queue"></ol>
+
+  <footer class="queue-foot" id="foot" hidden>
+    <span id="count"></span>
+    <button class="link" id="moreBtn">load more</button>
+  </footer>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

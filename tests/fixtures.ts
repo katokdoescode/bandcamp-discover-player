@@ -1,0 +1,152 @@
+import type { AudioEvent, AudioPort, PlayerEnv } from "@/lib/player";
+import { Player } from "@/lib/player";
+import type { Capture, ContentMessage, DiscoverResult, DiscoverSpec, Settings } from "@/lib/types";
+
+/** A discover_web result whose featured track is `id * 10`. */
+export function result(id: number, extra: Partial<DiscoverResult> = {}): DiscoverResult {
+  return {
+    item_id: id,
+    item_type: "a",
+    title: `Release ${id}`,
+    item_url: `https://band${id}.bandcamp.com/album/r${id}?from=discover_page`,
+    album_artist: null,
+    band_name: `Band ${id}`,
+    band_id: 1000 + id,
+    primary_image: { image_id: 5000 + id, is_art: true },
+    track_count: 3,
+    is_wishlisted: false,
+    is_owned: false,
+    featured_track: { id: id * 10, title: `Featured ${id}`, band_name: `Band ${id}`, stream_url: `https://stream/${id * 10}`, duration: 100 },
+    ...extra,
+  };
+}
+
+/** tralbum_details for release `id`: tracks id*10, id*10+1, id*10+2. */
+export function details(id: number, count = 3) {
+  return {
+    tralbum_artist: `Band ${id}`,
+    tracks: Array.from({ length: count }, (_, i) => ({
+      track_id: id * 10 + i,
+      track_num: i + 1,
+      title: `Track ${id}.${i + 1}`,
+      duration: 60,
+      is_streamable: true,
+      streaming_url: { "mp3-128": `https://stream/${id * 10 + i}?fresh=0` },
+    })),
+  };
+}
+
+export function capture(ids: number[], cursor: string | null = null): Capture {
+  return {
+    params: { category_id: 1, tag_norm_names: ["punk"], geoname_id: 0, slice: "rand", time_facet_id: null, include_result_types: ["a", "s"] },
+    results: ids.map((id) => result(id)),
+    cursor,
+    sig: ids.join(","),
+  };
+}
+
+export const SPEC: DiscoverSpec = {
+  pageUrl: "https://bandcamp.com/discover/punk/digital?s=rand",
+  label: "punk · digital",
+  params: { category_id: 1, tag_norm_names: ["punk"], geoname_id: 0, slice: "rand", time_facet_id: null, include_result_types: ["a", "s"] },
+};
+
+export class FakeAudio implements AudioPort {
+  paused = true;
+  duration = 0;
+  currentTime = 0;
+  src = "";
+  private handlers = new Map<AudioEvent, (() => void)[]>();
+
+  get hasSource() {
+    return !!this.src;
+  }
+  setSource(src: string) {
+    this.src = src;
+    this.currentTime = 0;
+  }
+  clear() {
+    this.src = "";
+  }
+  async play() {
+    this.paused = false;
+    this.fire("play");
+  }
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    this.fire("pause");
+  }
+  on(event: AudioEvent, fn: () => void) {
+    this.handlers.set(event, [...(this.handlers.get(event) || []), fn]);
+  }
+  fire(event: AudioEvent) {
+    for (const fn of this.handlers.get(event) || []) fn();
+  }
+}
+
+export interface Setup {
+  capture?: Capture;
+  spec?: DiscoverSpec | null;
+  fanId?: number | null;
+  /** Direct API answers; undefined means "bot challenge", i.e. use the tab proxy. */
+  api?: (url: string, body?: any) => unknown;
+  /** Answers through the tab proxy (apiFetch). */
+  proxy?: (url: string, body?: any) => unknown;
+  /** Release ids whose tralbum_details have no streamable tracks. */
+  silent?: number[];
+}
+
+/** Default API: tralbum_details per release id, discover_web → no more results. */
+export function defaultApi(silent: number[] = []) {
+  return (url: string) => {
+    const m = /tralbum_id=(\d+)/.exec(url);
+    if (m) {
+      const id = Number(m[1]);
+      return details(id, silent.includes(id) ? 0 : 3);
+    }
+    if (url.includes("discover_web")) return { results: [], cursor: null };
+    return undefined;
+  };
+}
+
+export async function setup(o: Setup = {}) {
+  const audio = new FakeAudio();
+  const sent: ContentMessage[] = [];
+  const apiCalls: { url: string; body?: any }[] = [];
+  const settings: Partial<Settings> = {};
+  const state = { capture: o.capture, spec: o.spec === undefined ? SPEC : o.spec, fanId: o.fanId ?? null };
+  const api = o.api ?? defaultApi(o.silent);
+
+  const env: PlayerEnv = {
+    audio,
+    bandcampTabs: async () => [{ id: 7, active: true }],
+    async sendToTab(_tabId, msg) {
+      sent.push(msg);
+      switch (msg.type) {
+        case "getDiscoverSpec":
+          return state.spec as any;
+        case "getFanId":
+          return state.fanId as any;
+        case "setWishlisted":
+          return true as any;
+        case "apiFetch":
+          return (o.proxy ?? api)(msg.url, msg.body) as any;
+      }
+    },
+    async fetchJson(url, body) {
+      apiCalls.push({ url, body });
+      return api(url, body);
+    },
+    getCapture: async () => state.capture,
+    settings: {
+      load: async () => ({ ...settings }),
+      save: async (s) => void Object.assign(settings, s),
+    },
+    // Deterministic shuffle: always swap with the first element.
+    random: () => 0,
+  };
+  const player = new Player(env);
+  await player.init();
+  return { player, audio, sent, apiCalls, settings, state, view: () => player.publicState() };
+}

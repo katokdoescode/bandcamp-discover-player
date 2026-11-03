@@ -1,0 +1,33 @@
+{
+  "name": "bandcamp-discover-player",
+  "displayName": "Discover Player for Bandcamp",
+  "description": "Play every track (or whole releases) from a Bandcamp discover page, in order or shuffled.",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint:firefox": "web-ext lint --source-dir .output/firefox-mv2",
+    "check": "npm run typecheck && npm test && npm run build && npm run build:firefox && npm run lint:firefox",
+    "postinstall": "wxt prepare"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@wxt-dev/auto-icons": "1.1.2",
+    "happy-dom": "21.0.4",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5",
+    "web-ext": "10.8.0",
+    "wxt": "0.21.5"
+  }
+}

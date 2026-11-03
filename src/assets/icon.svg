@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#1da0c3"/>
+  <!-- slanted "discover" tag, centered on 32,32 -->
+  <path d="M8 46 L21 18 H56 L43 46 Z" fill="#fff"/>
+  <!-- play triangle, optically centered inside the tag -->
+  <path d="M27 23.5 L41 32 L27 40.5 Z" fill="#1da0c3"/>
+</svg>
