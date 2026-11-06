@@ -3,7 +3,8 @@
 // storage) comes in through PlayerEnv, so the same code runs in Firefox's
 // background page, in Chrome's offscreen document and in unit tests.
 
-import { DISCOVER_URL, OWN_MARK, PAGE_SIZE, artUrl, toItem, toTracks, tralbumDetailsUrl } from "./bandcamp";
+import { DISCOVER_URL, OWN_MARK, PAGE_SIZE, artUrl, releaseYear, toItem, toTracks, tralbumDetailsUrl } from "./bandcamp";
+import type { TralbumDetails } from "./bandcamp";
 import type {
   Capture,
   ContentMessage,
@@ -194,7 +195,9 @@ export class Player {
 
   private async loadTracks(item: Item, force = false): Promise<Track[]> {
     if (item.tracks && !force) return item.tracks;
-    item.tracks = toTracks(await this.api(tralbumDetailsUrl(item)));
+    const data = await this.api<TralbumDetails>(tralbumDetailsUrl(item));
+    item.tracks = toTracks(data);
+    if (item.year == null) item.year = releaseYear(data.release_date);
     return item.tracks;
   }
 
@@ -533,6 +536,7 @@ export class Player {
                 artist: curItem.artist,
                 url: curItem.url,
                 art: artUrl(curItem.artId, 2),
+                year: curItem.year ?? null,
                 wishlisted: curItem.wishlisted,
                 owned: curItem.owned,
                 tracks: curItem.tracks && curItem.tracks.map(wish),
@@ -550,6 +554,7 @@ export class Player {
           featured: it.featured?.title ?? null,
           duration: it.featured?.duration ?? null,
           trackCount: it.trackCount,
+          year: it.year ?? null,
           wishlisted: it.wishlisted,
           owned: it.owned,
         };

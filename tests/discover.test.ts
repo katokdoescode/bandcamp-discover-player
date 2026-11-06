@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { artUrl, isPageDiscoverRequest, toItem, toTracks } from "@/lib/bandcamp";
+import { artUrl, isPageDiscoverRequest, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
 import { applyDiscoverResponse } from "@/lib/captures";
 import { parseDiscoverSpec } from "@/lib/discover-spec";
 import { formatTime, range, shuffled } from "@/lib/util";
@@ -100,6 +100,20 @@ describe("bandcamp helpers", () => {
   it("converts results and drops featured tracks without a stream", () => {
     const item = toItem(result(1, { album_artist: "Someone", featured_track: null }));
     expect(item).toMatchObject({ id: 1, type: "a", artist: "Someone", artId: 5001, featured: null });
+  });
+
+  it("reads the release year in every date format Bandcamp uses", () => {
+    expect(releaseYear("2026-10-30 00:00:00 UTC")).toBe(2026);
+    expect(releaseYear("30 Oct 1998 00:00:00 GMT")).toBe(1998);
+    expect(releaseYear(1793318400)).toBe(2026);
+    expect(releaseYear(undefined)).toBeNull();
+    expect(releaseYear("")).toBeNull();
+    expect(releaseYear(0)).toBeNull();
+  });
+
+  it("takes the year from discover results", () => {
+    expect(toItem(result(1, { release_date: "2019-05-03 00:00:00 UTC" })).year).toBe(2019);
+    expect(toItem(result(1)).year).toBeNull();
   });
 
   it("keeps only streamable tracks", () => {

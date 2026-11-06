@@ -20,6 +20,16 @@ export function artUrl(artId: number | null | undefined, size: number): string |
   return `https://f4.bcbits.com/img/a${String(artId).padStart(10, "0")}_${size}.jpg`;
 }
 
+/**
+ * Year of a release date in any of Bandcamp's formats: "2026-10-30 00:00:00 UTC"
+ * (discover), "30 Oct 2026 00:00:00 GMT" (band_details) or unix seconds (tralbum_details).
+ */
+export function releaseYear(date: string | number | null | undefined): number | null {
+  if (typeof date === "number") return Number.isFinite(date) && date > 0 ? new Date(date * 1000).getUTCFullYear() : null;
+  const m = date?.match(/\b(\d{4})\b/);
+  return m ? Number(m[1]) : null;
+}
+
 export function toItem(r: DiscoverResult): Item {
   const ft = r.featured_track;
   return {
@@ -33,6 +43,7 @@ export function toItem(r: DiscoverResult): Item {
     trackCount: r.track_count || 1,
     wishlisted: !!r.is_wishlisted,
     owned: !!r.is_owned,
+    year: releaseYear(r.release_date),
     featured:
       ft && ft.stream_url
         ? { id: ft.id, title: ft.title, artist: ft.band_name, stream: ft.stream_url, duration: ft.duration }
@@ -45,8 +56,10 @@ export function tralbumDetailsUrl(item: Pick<Item, "bandId" | "id" | "type">): s
   return `${API}/mobile/25/tralbum_details?band_id=${item.bandId}&tralbum_id=${item.id}&tralbum_type=${item.type}`;
 }
 
-interface TralbumDetails {
+export interface TralbumDetails {
   tralbum_artist?: string;
+  /** Unix seconds. */
+  release_date?: number;
   tracks?: {
     track_id: number;
     track_num?: number;
