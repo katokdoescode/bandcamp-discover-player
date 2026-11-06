@@ -3,6 +3,7 @@
 // random on every load). A request with cursor "*" means the page started a new
 // list: a reload or a filter change.
 
+import { normalizeResults } from "./bandcamp";
 import type { Capture, DiscoverParams, DiscoverResponse } from "./types";
 
 /**
@@ -18,12 +19,13 @@ export function applyDiscoverResponse(
   const res = data as DiscoverResponse | null;
   if (!res || !Array.isArray(res.results)) return prev;
 
+  const results = normalizeResults(res.results);
   const { cursor, size: _size, ...params } = body as Record<string, unknown>;
   const startsList = !cursor || cursor === "*";
   if (!startsList && !prev) return prev; // the list started before we were listening
 
   const base: Capture = startsList
-    ? { params: params as DiscoverParams, results: [], cursor: null, sig: res.results.map((r) => r.item_id).join(",") }
+    ? { params: params as DiscoverParams, results: [], cursor: null, sig: results.map((r) => r.item_id).join(",") }
     : prev!;
-  return { ...base, results: [...base.results, ...res.results], cursor: res.cursor || null };
+  return { ...base, results: [...base.results, ...results], cursor: res.cursor || null };
 }

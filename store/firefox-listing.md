@@ -26,6 +26,7 @@ Features:
 - Plays exactly the releases the page shows, including ones loaded with "View more results", and keeps loading more when the list runs out.
 - Two modes: one track per release, or every release in full.
 - Shuffle the order of releases (tracks inside a release stay in order).
+- Shows the release year next to the artist and in the list.
 - Reloaded the page or changed filters? The player offers to update its list, and the current track keeps playing.
 - Add releases or single tracks to your Bandcamp wishlist with the heart button (you need to be logged in on bandcamp.com).
 - Keeps playing when the popup is closed. Media keys work.
@@ -75,6 +76,14 @@ Permissions:
 The content script on bandcamp.com uses `content.fetch` to make same-origin requests as the page (release tracklists, and wishlist add/remove, which only happens when the user clicks a heart). No remote code is loaded or executed; no data is sent anywhere except to Bandcamp.
 
 ## Release notes
+
+### 0.3.0
+
+The release year is shown next to the artist and in the list.
+
+### 0.2.3
+
+Fixes the player after Bandcamp changed its discover data: artists, cover art, track counts and whole releases work again.
 
 ### 0.2.2
 

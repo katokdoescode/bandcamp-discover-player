@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { OWN_MARK } from "@/lib/bandcamp";
 import { Player } from "@/lib/player";
-import { capture, result, setup } from "./fixtures";
+import { capture, defaultApi, result, setup } from "./fixtures";
 
 const TAB = 7;
 const playing = (audio: { src: string }) => audio.src;
@@ -44,6 +44,16 @@ describe("loading a discover page", () => {
 
     expect(sent.some((m) => m.type === "apiFetch")).toBe(true);
     expect(view().queue).toHaveLength(1);
+  });
+
+  it("shows the release year in the queue and for the current release", async () => {
+    const c = capture([1, 2]);
+    c.results[0]!.release_date = "2024-02-09 00:00:00 UTC";
+    const { player, view } = await setup({ capture: c });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+
+    expect(view().queue.map((q) => q.year)).toEqual([2024, null]);
+    expect(view().current!.release.year).toBe(2024);
   });
 
   it("refuses pages that aren't discover pages", async () => {
@@ -107,6 +117,18 @@ describe("full releases", () => {
       heard.push(playing(audio));
     }
     expect(heard).toEqual(["https://stream/10?fresh=0", "https://stream/11?fresh=0", "https://stream/12?fresh=0", "https://stream/20?fresh=0"]);
+  });
+
+  it("takes the year from the tracklist when discover did not give one", async () => {
+    const base = defaultApi();
+    const api = (url: string) => {
+      const d = base(url);
+      return url.includes("tralbum_id=1&") ? { ...(d as object), release_date: 1793318400 } : d;
+    };
+    const { player, view } = await setup({ capture: capture([1, 2]), api });
+    await player.handle({ cmd: "setMode", mode: "album" });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().current!.release.year).toBe(2026);
   });
 
   it("goes back to the previous track, and to the last track of the previous release", async () => {

@@ -21,6 +21,7 @@ Features:
 - Plays exactly the releases the page shows, including ones loaded with "View more results", and keeps loading more when the list runs out.
 - Two modes: one track per release, or every release in full.
 - Shuffle the order of releases (tracks inside a release stay in order).
+- Shows the release year next to the artist and in the list.
 - Reloaded the page or changed filters? The player offers to update its list, and the current track keeps playing.
 - Add releases or single tracks to your Bandcamp wishlist with the heart button (you need to be logged in on bandcamp.com).
 - Keeps playing when the popup is closed. Media keys work.

@@ -133,6 +133,7 @@ function render(): void {
     $("relTitle").textContent = rel.title;
     $("relArtist").textContent = rel.artist;
     $<HTMLAnchorElement>("relArtist").href = rel.url;
+    $("relYear").textContent = rel.year ? ` · ${rel.year}` : "";
     $("trackTitle").textContent = cur.track.title;
     $("trackTitle").title = cur.track.title;
 
@@ -222,7 +223,9 @@ function renderQueue(): void {
     row.append(title);
 
     const time = s.mode === "album" ? `${q.trackCount} ${q.trackCount === 1 ? "track" : "tracks"}` : q.duration ? fmt(q.duration) : "";
-    row.append(el("span", "time", time));
+    const timeCol = el("span", "time", time);
+    if (q.year) timeCol.append(el("span", "year", String(q.year)));
+    row.append(timeCol);
     row.append(wishButton(q.wishlisted, q.owned, "release", q.index));
 
     row.addEventListener("click", () => void send(isCurrent ? { cmd: "togglePlay" } : { cmd: "playTrack", itemIndex: q.index }));

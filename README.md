@@ -49,6 +49,7 @@ In Chrome, unzip one and load the folder as above.
   (including those loaded with "View more results"), then keeps loading more.
 - **one track per release** / **full releases** — one track from each release, or every release in full.
 - **shuffle** — shuffles releases; tracks within a release stay in order.
+- The release year is shown next to the artist and in the list.
 - After the page is reloaded (`s=rand` gives new results every time) or its filters
   change, the player offers **update list**; the current track keeps playing.
 - ♡ wishlist for releases and single tracks (red when wishlisted, click again to remove).

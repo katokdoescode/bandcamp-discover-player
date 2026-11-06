@@ -32,6 +32,8 @@ export interface DiscoverResult {
   track_count?: number;
   is_wishlisted?: boolean | null;
   is_owned?: boolean | null;
+  /** "2026-10-30 00:00:00 UTC" */
+  release_date?: string | null;
   featured_track?: {
     id: number;
     title: string;
@@ -75,6 +77,8 @@ export interface Item {
   trackCount: number;
   wishlisted: boolean;
   owned: boolean;
+  /** Release year; missing in snapshots saved before 0.3.0. */
+  year?: number | null;
   featured: Track | null;
   tracks: Track[] | null;
 }
@@ -121,6 +125,7 @@ export interface PublicState {
       artist: string;
       url: string;
       art: string | null;
+      year: number | null;
       wishlisted: boolean;
       owned: boolean;
       tracks: (Track & { wishlisted: boolean })[] | null;
@@ -135,6 +140,7 @@ export interface PublicState {
     featured: string | null;
     duration: number | null;
     trackCount: number;
+    year: number | null;
     wishlisted: boolean;
     owned: boolean;
   }[];
