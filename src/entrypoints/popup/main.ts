@@ -1,7 +1,7 @@
 import { browser, type Browser } from "wxt/browser";
 import { request } from "@/lib/messaging";
 import type { DiscoverSpec, LyricsResult, PlayerCommand, PlayerEvent, PublicState } from "@/lib/types";
-import { formatTime as fmt } from "@/lib/util";
+import { formatTime as fmt, shouldAutoLoad } from "@/lib/util";
 
 type TabSpec = DiscoverSpec & { sig: string | null };
 type Reply = { type: "reply"; reqId: number; result?: unknown; error?: string };
@@ -19,6 +19,7 @@ let reqSeq = 0;
 /** The track whose lyrics replace the queue; `follow` keeps it on the playing track. */
 let lyricsView: { itemIndex: number; trackId: number; title: string; follow: boolean } | null = null;
 let lyricsShown = ""; // itemIndex:trackId of the text on screen
+let autoLoadSent = false; // a loadMore request is in flight
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
 // The player may need starting first (Chrome's offscreen document), and Chrome
@@ -152,6 +153,8 @@ function render(): void {
   $("playBtn").classList.toggle("playing", !!cur && !state.paused);
   document.querySelectorAll<HTMLElement>(".tab").forEach((t) => t.classList.toggle("active", t.dataset.mode === state!.mode));
   $<HTMLInputElement>("shuffle").checked = state.shuffle;
+  $<HTMLInputElement>("repeat").checked = state.repeat;
+  $("repeatToggle").hidden = state.mode !== "album"; // looping a release only makes sense when playing it in full
 
   const status = $("status");
   status.hidden = !state.error && !(state.loading && !state.queue.length);
@@ -167,6 +170,18 @@ function render(): void {
   renderTime();
   renderQueue();
   renderLyrics();
+  maybeAutoLoad();
+}
+
+/** Loads the next page when the queue is scrolled near its end. */
+function maybeAutoLoad(): void {
+  const list = $("queue");
+  // Hidden behind the lyrics the list has no height and would look scrolled to its end.
+  if (!state?.source || list.hidden || autoLoadSent || !shouldAutoLoad(state, list)) return;
+  autoLoadSent = true;
+  send({ cmd: "loadMore" })
+    .catch(() => {}) // the player reports errors in its state
+    .finally(() => (autoLoadSent = false));
 }
 
 function renderTime(): void {
@@ -329,6 +344,7 @@ $("playBtn").addEventListener("click", () => void send({ cmd: "togglePlay" }));
 $("nextBtn").addEventListener("click", () => void send({ cmd: "next" }));
 $("prevBtn").addEventListener("click", () => void send({ cmd: "prev" }));
 $("moreBtn").addEventListener("click", () => void send({ cmd: "loadMore" }));
+$("queue").addEventListener("scroll", maybeAutoLoad, { passive: true });
 $("noticeClose").addEventListener("click", () => void send({ cmd: "dismissNotice" }));
 $("relWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex);
@@ -341,6 +357,7 @@ $("lyricsBack").addEventListener("click", () => toggleLyrics(lyricsView!));
 $("trackWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex, state.current.track.id);
 });
+$<HTMLInputElement>("repeat").addEventListener("change", (e) => void send({ cmd: "setRepeat", on: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>("shuffle").addEventListener("change", (e) => void send({ cmd: "setShuffle", on: (e.target as HTMLInputElement).checked }));
 document.querySelectorAll<HTMLElement>(".tab").forEach((t) =>
   t.addEventListener("click", () => void send({ cmd: "setMode", mode: t.dataset.mode === "album" ? "album" : "track" })),

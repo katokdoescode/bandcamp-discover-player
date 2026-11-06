@@ -89,9 +89,14 @@ export interface Item {
 
 export type Mode = "track" | "album";
 
+/** Keys of Settings, as read from extension storage. */
+export const SETTINGS_KEYS = ["mode", "shuffle", "repeat"] as const;
+
 export interface Settings {
   mode: Mode;
   shuffle: boolean;
+  /** Loop the current release (full releases mode only). */
+  repeat: boolean;
 }
 
 /** Messages the extension sends to the bandcamp.com content script. */
@@ -114,6 +119,7 @@ export interface PublicState {
   notice: "login" | null;
   mode: Mode;
   shuffle: boolean;
+  repeat: boolean;
   loading: boolean;
   error: string | null;
   hasMore: boolean;
@@ -160,6 +166,7 @@ export type PlayerCommand =
   | { cmd: "seek"; fraction: number }
   | { cmd: "playTrack"; itemIndex: number; trackId?: number }
   | { cmd: "setShuffle"; on: boolean }
+  | { cmd: "setRepeat"; on: boolean }
   | { cmd: "setMode"; mode: Mode }
   | { cmd: "toggleWishlist"; itemIndex: number; trackId?: number }
   | { cmd: "dismissNotice" }

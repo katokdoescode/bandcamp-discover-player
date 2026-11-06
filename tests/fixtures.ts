@@ -106,6 +106,8 @@ export interface Setup {
   proxy?: (url: string, body?: any) => unknown;
   /** Release ids whose tralbum_details have no streamable tracks. */
   silent?: number[];
+  /** Settings saved by an earlier session. */
+  settings?: Partial<Settings>;
   /** Track ids whose tralbum_details say has_lyrics. */
   lyrics?: number[];
   /** HTML of pages by URL, for fetchText. */
@@ -129,7 +131,7 @@ export async function setup(o: Setup = {}) {
   const audio = new FakeAudio();
   const sent: ContentMessage[] = [];
   const apiCalls: { url: string; body?: any }[] = [];
-  const settings: Partial<Settings> = {};
+  const settings: Partial<Settings> = { ...o.settings };
   const state = { capture: o.capture, spec: o.spec === undefined ? SPEC : o.spec, fanId: o.fanId ?? null };
   const api = o.api ?? defaultApi(o.silent, o.lyrics);
   const pageCalls: string[] = [];
