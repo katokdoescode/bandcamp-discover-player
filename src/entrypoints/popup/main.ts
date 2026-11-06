@@ -1,6 +1,6 @@
 import { browser, type Browser } from "wxt/browser";
 import { request } from "@/lib/messaging";
-import type { DiscoverSpec, PlayerCommand, PlayerEvent, PublicState } from "@/lib/types";
+import type { DiscoverSpec, LyricsResult, PlayerCommand, PlayerEvent, PublicState } from "@/lib/types";
 import { formatTime as fmt } from "@/lib/util";
 
 type TabSpec = DiscoverSpec & { sig: string | null };
@@ -16,6 +16,9 @@ let activeTabId: number | null = null;
 let queueKey = "";
 let dragging = false;
 let reqSeq = 0;
+/** The track whose lyrics replace the queue; `follow` keeps it on the playing track. */
+let lyricsView: { itemIndex: number; trackId: number; title: string; follow: boolean } | null = null;
+let lyricsShown = ""; // itemIndex:trackId of the text on screen
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
 // The player may need starting first (Chrome's offscreen document), and Chrome
@@ -141,6 +144,9 @@ function render(): void {
     setWishState(relWish, rel.wishlisted, rel.owned, "release");
     relWish.querySelector(".label")!.textContent = rel.owned ? "In your collection" : rel.wishlisted ? "In Wishlist" : "Wishlist";
     setWishState($<HTMLButtonElement>("trackWish"), cur.track.wishlisted, false, "track");
+    const lyricsBtn = $("lyricsBtn");
+    lyricsBtn.hidden = !cur.track.hasLyrics;
+    lyricsBtn.classList.toggle("on", !!lyricsView?.follow);
   }
 
   $("playBtn").classList.toggle("playing", !!cur && !state.paused);
@@ -160,6 +166,7 @@ function render(): void {
 
   renderTime();
   renderQueue();
+  renderLyrics();
 }
 
 function renderTime(): void {
@@ -235,9 +242,19 @@ function renderQueue(): void {
       const subList = el("ol", "subtracks");
       for (const t of tracks) {
         const sub = el("li", "subtrack" + (t.id === cur!.track.id ? " current" : ""));
+        const lyricsLink = el("span");
+        if (t.hasLyrics) {
+          lyricsLink.className = "link lyrics-link" + (lyricsView && !lyricsView.follow && lyricsView.trackId === t.id ? " on" : "");
+          lyricsLink.textContent = "lyrics";
+          lyricsLink.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleLyrics({ itemIndex: q.index, trackId: t.id, title: t.title, follow: false });
+          });
+        }
         sub.append(
           el("span", "num", `${t.num}.`),
           el("span", "name", t.title),
+          lyricsLink,
           el("span", "time", fmt(t.duration)),
           wishButton(t.wishlisted, false, "track", q.index, t.id),
         );
@@ -250,6 +267,51 @@ function renderQueue(): void {
   });
 
   if (currentRow) revealInList(list, currentRow, firstRender);
+}
+
+// ---------- lyrics ----------
+
+function toggleLyrics(v: NonNullable<typeof lyricsView>): void {
+  const same = lyricsView && lyricsView.follow === v.follow && (v.follow || lyricsView.trackId === v.trackId);
+  lyricsView = same ? null : v;
+  queueKey = ""; // redraw the lyrics links' state
+  render();
+}
+
+/** Shows the lyrics in place of the queue, fetching them from the player when the track changes. */
+function renderLyrics(): void {
+  const s = state!;
+  const cur = s.current;
+  if (lyricsView?.follow && cur && (cur.itemIndex !== lyricsView.itemIndex || cur.track.id !== lyricsView.trackId)) {
+    lyricsView = { itemIndex: cur.itemIndex, trackId: cur.track.id, title: cur.track.title, follow: true };
+  }
+  const open = !!lyricsView && !!s.source;
+  $("lyricsView").hidden = !open;
+  $("queue").hidden = open;
+  if (open) $("foot").hidden = true;
+  if (!open) {
+    lyricsShown = "";
+    return;
+  }
+
+  const v = lyricsView!;
+  const key = `${v.itemIndex}:${v.trackId}`;
+  $("lyricsTitle").textContent = v.title;
+  if (key === lyricsShown) return;
+  lyricsShown = key;
+  const box = $("lyricsText");
+  const show = (text: string, muted = false) => {
+    if (lyricsShown !== key) return; // the view moved on while this was loading
+    box.textContent = text;
+    box.classList.toggle("muted", muted);
+  };
+  show("loading lyrics…", true);
+  $("lyricsView").scrollTop = 0;
+  // A failure stays on screen; closing and reopening the lyrics tries again.
+  send<LyricsResult>({ cmd: "getLyrics", itemIndex: v.itemIndex, trackId: v.trackId }).then(
+    (r) => ("error" in r ? show(r.error, true) : show(r.text ?? "No lyrics for this track.", !r.text)),
+    (e: unknown) => show(e instanceof Error ? e.message : String(e), true),
+  );
 }
 
 /** Scrolls only the queue (scrollIntoView would also scroll the whole popup and hide its header). */
@@ -271,6 +333,11 @@ $("noticeClose").addEventListener("click", () => void send({ cmd: "dismissNotice
 $("relWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex);
 });
+$("lyricsBtn").addEventListener("click", () => {
+  const cur = state?.current;
+  if (cur) toggleLyrics({ itemIndex: cur.itemIndex, trackId: cur.track.id, title: cur.track.title, follow: true });
+});
+$("lyricsBack").addEventListener("click", () => toggleLyrics(lyricsView!));
 $("trackWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex, state.current.track.id);
 });

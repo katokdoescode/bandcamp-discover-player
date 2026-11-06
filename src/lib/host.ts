@@ -49,6 +49,13 @@ export async function fetchJson(url: string, body?: unknown): Promise<unknown> {
   return res.ok && type.includes("json") ? res.json() : undefined;
 }
 
+/** Fetches a page's HTML; undefined on HTTP errors or a non-HTML answer. */
+export async function fetchText(url: string): Promise<string | undefined> {
+  const res = await fetch(url, { credentials: "include" });
+  const type = res.headers.get("content-type") || "";
+  return res.ok && type.includes("html") ? res.text() : undefined;
+}
+
 /**
  * Serves popups that connect with runtime.connect({ name: "popup" }).
  * Requests carry a reqId and get a "reply"; state and time updates are pushed.

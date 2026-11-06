@@ -3,7 +3,7 @@
 // storage) comes in through PlayerEnv, so the same code runs in Firefox's
 // background page, in Chrome's offscreen document and in unit tests.
 
-import { DISCOVER_URL, OWN_MARK, PAGE_SIZE, artUrl, normalizeResults, releaseYear, toItem, toTracks, tralbumDetailsUrl } from "./bandcamp";
+import { DISCOVER_URL, OWN_MARK, PAGE_SIZE, artUrl, canFetchLyrics, parseLyrics, normalizeResults, releaseYear, toItem, toTracks, tralbumDetailsUrl } from "./bandcamp";
 import type { TralbumDetails } from "./bandcamp";
 import type {
   Capture,
@@ -11,6 +11,7 @@ import type {
   DiscoverResponse,
   DiscoverSpec,
   Item,
+  LyricsResult,
   Mode,
   PlayerCommand,
   PlayerEvent,
@@ -43,6 +44,8 @@ export interface PlayerEnv {
   sendToTab<T>(tabId: number, msg: ContentMessage): Promise<T>;
   /** Fetches JSON directly; resolves to undefined when the answer is not JSON (bot challenge, network). */
   fetchJson(url: string, body?: unknown): Promise<unknown>;
+  /** Fetches a page's HTML directly; undefined when it is not available. */
+  fetchText(url: string): Promise<string | undefined>;
   getCapture(tabId: number): Promise<Capture | undefined>;
   settings: {
     load(): Promise<Partial<Settings>>;
@@ -98,6 +101,8 @@ export class Player {
   /** Bumps on every play request, so stale async work can bail out. */
   private playGen = 0;
   private retried = false;
+  /** Lyrics by track id; null when the track page has none. */
+  private lyrics = new Map<number, string | null>();
   private resumeAt = 0;
   private lastTick = 0;
   private listeners = new Set<(e: PlayerEvent) => void>();
@@ -163,6 +168,8 @@ export class Player {
           return;
         case "loadMore":
           return this.fetchNextPage();
+        case "getLyrics":
+          return this.getLyrics(c.itemIndex, c.trackId);
       }
     } catch (e) {
       this.error = errorMessage(e);
@@ -301,6 +308,9 @@ export class Player {
         this.pos = pos;
         this.current = { itemIndex, track };
         this.startAudio(track.stream);
+        // Discover's featured track says nothing about lyrics: the tracklist does.
+        const item = this.itemAt(itemIndex);
+        if (!item.tracks) this.loadTracks(item).then(() => this.broadcast(), () => {});
         return;
       }
       pos += direction;
@@ -353,6 +363,26 @@ export class Player {
       return;
     }
     return this.playPos(this.pos - 1, "last", -1);
+  }
+
+  /**
+   * Lyrics of a track, fetched from its page on Bandcamp. Never throws: a failure is
+   * the answer's own business, not the player's error line.
+   */
+  private async getLyrics(itemIndex: number, trackId: number): Promise<LyricsResult> {
+    if (this.lyrics.has(trackId)) return { text: this.lyrics.get(trackId)! };
+    try {
+      const tracks = await this.loadTracks(this.itemAt(itemIndex));
+      const track = tracks.find((t) => t.id === trackId);
+      if (!track?.hasLyrics || !canFetchLyrics(track.url)) return { text: null };
+      const html = await this.env.fetchText(track.url).catch(() => undefined);
+      if (html === undefined) return { error: "Could not load the lyrics. Try again later." };
+      const text = parseLyrics(html);
+      this.lyrics.set(trackId, text);
+      return { text };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
   }
 
   /** Plays a specific track (or the default track) of a release from the list. */
@@ -513,7 +543,11 @@ export class Player {
     const a = this.env.audio;
     const cur = this.current;
     const curItem = cur ? this.items[cur.itemIndex] : null;
-    const wish = (t: Track) => ({ ...t, wishlisted: !!this.trackWish[t.id] });
+    const known = (t: Track) => curItem?.tracks?.find((x) => x.id === t.id) ?? t;
+    const wish = (t: Track) => {
+      const k = known(t);
+      return { ...t, wishlisted: !!this.trackWish[t.id], hasLyrics: !!k.hasLyrics && canFetchLyrics(k.url) };
+    };
     return {
       source: this.source && { label: this.source.label, pageUrl: this.source.pageUrl, sig: this.source.sig },
       notice: this.notice,

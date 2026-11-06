@@ -2,7 +2,7 @@
 // Chrome closes it after ~30 s without sound, so the player's state is saved
 // to storage.session (through the service worker) and restored on the next start.
 
-import { COMMANDS, attachMediaSession, fetchJson, htmlAudioPort, servePopupPorts } from "@/lib/host";
+import { COMMANDS, attachMediaSession, fetchJson, fetchText, htmlAudioPort, servePopupPorts } from "@/lib/host";
 import { bridge } from "@/lib/hosts/chrome";
 import { listen } from "@/lib/messaging";
 import { Player } from "@/lib/player";
@@ -13,6 +13,7 @@ const player = new Player({
   bandcampTabs: () => bridge("bandcampTabs"),
   sendToTab: (tabId, msg) => bridge("sendToTab", tabId, msg) as Promise<any>,
   fetchJson,
+  fetchText,
   getCapture: (tabId) => bridge("getCapture", tabId),
   settings: {
     load: () => bridge("loadSettings"),

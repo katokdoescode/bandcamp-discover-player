@@ -48,6 +48,7 @@
         <div class="info_line">
           <span class="title" id="trackTitle"></span>
           <button class="wish" id="trackWish"></button>
+          <button class="link lyrics-link" id="lyricsBtn" hidden>lyrics</button>
           <span class="time"><span id="timeElapsed">00:00</span> / <span id="timeTotal">00:00</span></span>
         </div>
         <div class="progress_row">
@@ -76,6 +77,14 @@
   <div class="status" id="status" hidden></div>
 
   <ol class="track_list" id="queue"></ol>
+
+  <section class="lyrics" id="lyricsView" hidden>
+    <div class="lyrics-head">
+      <h4 id="lyricsTitle"></h4>
+      <button class="link" id="lyricsBack">back to list</button>
+    </div>
+    <div class="lyrics-text" id="lyricsText"></div>
+  </section>
 
   <footer class="queue-foot" id="foot" hidden>
     <span id="count"></span>

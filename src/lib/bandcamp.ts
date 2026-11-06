@@ -84,6 +84,8 @@ export interface TralbumDetails {
     duration: number;
     is_streamable?: boolean;
     streaming_url?: Record<string, string> | null;
+    has_lyrics?: boolean;
+    track_url?: string;
   }[];
 }
 
@@ -92,6 +94,62 @@ export function toTracks(data: TralbumDetails): Track[] {
   return (data.tracks || []).flatMap((t) => {
     const stream = t.is_streamable ? t.streaming_url?.["mp3-128"] : undefined;
     if (!stream) return [];
-    return [{ id: t.track_id, num: t.track_num, title: t.title, artist: t.band_name || data.tralbum_artist, stream, duration: t.duration }];
+    return [
+      {
+        id: t.track_id,
+        num: t.track_num,
+        title: t.title,
+        artist: t.band_name || data.tralbum_artist,
+        stream,
+        duration: t.duration,
+        hasLyrics: !!t.has_lyrics,
+        url: t.track_url,
+      },
+    ];
   });
+}
+
+/** Lyrics can only be fetched from Bandcamp pages (the extension has no access to artists' custom domains). */
+export function canFetchLyrics(url: string | undefined): url is string {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && (u.hostname === "bandcamp.com" || u.hostname.endsWith(".bandcamp.com"));
+  } catch {
+    return false;
+  }
+}
+
+const ENTITIES: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt: ">", apos: "'", "#39": "'" };
+const decodeEntities = (s: string) =>
+  s.replace(/&(quot|amp|lt|gt|apos|#39|#x[0-9a-f]+|#\d+);/gi, (m, e: string) => {
+    if (e[0] === "#") return String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1)));
+    return ENTITIES[e.toLowerCase()] ?? m;
+  });
+
+/**
+ * Lyrics text from a Bandcamp track page: its ld+json (recordingOf.lyrics.text),
+ * or else the data-tralbum attribute (trackinfo[0].lyrics). Plain string parsing,
+ * so it works without a DOM.
+ */
+export function parseLyrics(html: string): string | null {
+  const clean = (t: unknown) => (typeof t === "string" && t.trim() ? t.replace(/\r\n?/g, "\n").trim() : null);
+  const ld = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/i.exec(html);
+  if (ld) {
+    try {
+      const text = clean(JSON.parse(ld[1]!)?.recordingOf?.lyrics?.text);
+      if (text) return text;
+    } catch {
+      // fall back to data-tralbum
+    }
+  }
+  const attr = /data-tralbum="([^"]*)"/.exec(html);
+  if (attr) {
+    try {
+      return clean(JSON.parse(decodeEntities(attr[1]!))?.trackinfo?.[0]?.lyrics);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }

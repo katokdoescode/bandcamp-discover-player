@@ -64,6 +64,10 @@ export interface Track {
   artist?: string;
   stream: string;
   duration: number;
+  /** From tralbum_details; unknown for discover's featured track until the tracklist loads. */
+  hasLyrics?: boolean;
+  /** Track page, where the lyrics text lives. */
+  url?: string;
 }
 
 export interface Item {
@@ -159,7 +163,11 @@ export type PlayerCommand =
   | { cmd: "setMode"; mode: Mode }
   | { cmd: "toggleWishlist"; itemIndex: number; trackId?: number }
   | { cmd: "dismissNotice" }
-  | { cmd: "loadMore" };
+  | { cmd: "loadMore" }
+  | { cmd: "getLyrics"; itemIndex: number; trackId: number };
+
+/** Answer to getLyrics: the text (null when the track has none), or why it could not be loaded. */
+export type LyricsResult = { text: string | null } | { error: string };
 
 /** Player → popup events. */
 export type PlayerEvent =
