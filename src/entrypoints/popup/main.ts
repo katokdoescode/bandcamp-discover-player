@@ -1,7 +1,7 @@
 import { browser, type Browser } from "wxt/browser";
 import { request } from "@/lib/messaging";
 import type { DiscoverSpec, PlayerCommand, PlayerEvent, PublicState } from "@/lib/types";
-import { formatTime as fmt } from "@/lib/util";
+import { formatTime as fmt, shouldAutoLoad } from "@/lib/util";
 
 type TabSpec = DiscoverSpec & { sig: string | null };
 type Reply = { type: "reply"; reqId: number; result?: unknown; error?: string };
@@ -16,6 +16,7 @@ let activeTabId: number | null = null;
 let queueKey = "";
 let dragging = false;
 let reqSeq = 0;
+let autoLoadSent = false; // a loadMore request is in flight
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
 // The player may need starting first (Chrome's offscreen document), and Chrome
@@ -162,6 +163,16 @@ function render(): void {
 
   renderTime();
   renderQueue();
+  maybeAutoLoad();
+}
+
+/** Loads the next page when the queue is scrolled near its end. */
+function maybeAutoLoad(): void {
+  if (!state?.source || autoLoadSent || !shouldAutoLoad(state, $("queue"))) return;
+  autoLoadSent = true;
+  send({ cmd: "loadMore" })
+    .catch(() => {}) // the player reports errors in its state
+    .finally(() => (autoLoadSent = false));
 }
 
 function renderTime(): void {
@@ -269,6 +280,7 @@ $("playBtn").addEventListener("click", () => void send({ cmd: "togglePlay" }));
 $("nextBtn").addEventListener("click", () => void send({ cmd: "next" }));
 $("prevBtn").addEventListener("click", () => void send({ cmd: "prev" }));
 $("moreBtn").addEventListener("click", () => void send({ cmd: "loadMore" }));
+$("queue").addEventListener("scroll", maybeAutoLoad, { passive: true });
 $("noticeClose").addEventListener("click", () => void send({ cmd: "dismissNotice" }));
 $("relWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex);

@@ -18,7 +18,7 @@ How to use it:
 2. Click the toolbar icon and press "play this page".
 
 Features:
-- Plays exactly the releases the page shows, including ones loaded with "View more results", and keeps loading more when the list runs out.
+- Plays exactly the releases the page shows, including ones loaded with "View more results", and loads more by itself as you scroll or listen to the end.
 - Two modes: one track per release, or every release in full.
 - Shuffle the order of releases (tracks inside a release stay in order).
 - Repeat (beta): loop the release you are listening to in full.

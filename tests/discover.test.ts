@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { artUrl, isPageDiscoverRequest, normalizeResults, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
 import { applyDiscoverResponse } from "@/lib/captures";
 import { parseDiscoverSpec } from "@/lib/discover-spec";
-import { formatTime, range, shuffled } from "@/lib/util";
+import { AUTO_LOAD_MARGIN, formatTime, range, shouldAutoLoad, shuffled } from "@/lib/util";
 import { capture, details, result } from "./fixtures";
 
 describe("parseDiscoverSpec", () => {
@@ -156,6 +156,19 @@ describe("util", () => {
     expect(formatTime(0)).toBe("00:00");
     expect(formatTime(174.6)).toBe("02:54");
     expect(formatTime(NaN)).toBe("00:00");
+  });
+
+  it("auto-loads only near the end of the queue, when more exist and nothing failed", () => {
+    const ok = { hasMore: true, loading: false, error: null };
+    const near = { scrollTop: 1000 - 300 - AUTO_LOAD_MARGIN, scrollHeight: 1000, clientHeight: 300 };
+    const far = { scrollTop: 0, scrollHeight: 1000, clientHeight: 300 };
+    const short = { scrollTop: 0, scrollHeight: 200, clientHeight: 300 };
+    expect(shouldAutoLoad(ok, near)).toBe(true);
+    expect(shouldAutoLoad(ok, short)).toBe(true);
+    expect(shouldAutoLoad(ok, far)).toBe(false);
+    expect(shouldAutoLoad({ ...ok, hasMore: false }, near)).toBe(false);
+    expect(shouldAutoLoad({ ...ok, loading: true }, near)).toBe(false);
+    expect(shouldAutoLoad({ ...ok, error: "offline" }, near)).toBe(false);
   });
 
   it("shuffles without losing items", () => {
