@@ -279,9 +279,13 @@ a.bc-button { display: inline-flex; align-items: center; text-decoration: none; 
 }
 
 .tabs { display: flex; gap: 14px; }
+/* With the third tab there is no room for the word: shuffle keeps its icon and tooltip. */
+.options:has(#recsTab:not([hidden])) .tabs { gap: 11px; }
+.options:has(#recsTab:not([hidden])) .shuffle .label { display: none; }
 
 .tab {
   padding: 8px 0 7px;
+  white-space: nowrap;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   color: var(--link);
@@ -403,6 +407,18 @@ a.bc-button { display: inline-flex; align-items: center; text-decoration: none; 
 .subtrack .time { color: var(--muted); font-size: 11px; }
 .subtrack .lyrics-link { font-size: 11px; }
 .subtrack .lyrics-link.on { color: var(--text); font-weight: 700; }
+
+/* "you may also like": the playing release's recommendations, shown in place of the queue */
+.also-like { display: block; margin-top: 6px; font-size: 12px; }
+.recs { margin: 0; padding-top: 8px; }
+.recs-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 0 14px; }
+.recs-head h4 { margin: 0; min-width: 0; font-size: 13px; font-weight: 700; }
+.recs-head .link { flex: none; font-size: 12px; }
+.recs-for { margin: 2px 14px 0; color: var(--muted); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.recs-status { margin: 8px 14px 0; color: var(--muted); }
+.recs-status:empty { display: none; }
+.recs-list { margin-top: 6px; }
+.tab:disabled { color: var(--muted); cursor: default; }
 
 /* lyrics of a track, shown in place of the queue like on a Bandcamp release page */
 .lyrics { margin: 0 14px; padding: 8px 0 10px; max-height: 330px; overflow-y: auto; }

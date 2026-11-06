@@ -10,7 +10,8 @@ import {
   PAGE_SIZE,
   artUrl,
   byReleaseDate,
-  canFetchLyrics,
+  isBandcampPage,
+  parseRecommendations,
   normalizeResults,
   parseLyrics,
   releaseYear,
@@ -19,7 +20,7 @@ import {
   toTracks,
   tralbumDetailsUrl,
 } from "./bandcamp";
-import type { BandDetails, TralbumDetails } from "./bandcamp";
+import type { BandDetails, Recommendations, TralbumDetails } from "./bandcamp";
 import type {
   ArtistOrder,
   ArtistSpec,
@@ -34,6 +35,7 @@ import type {
   PlayerCommand,
   PlayerEvent,
   PublicState,
+  RecsResult,
   Settings,
   Track,
 } from "./types";
@@ -88,7 +90,9 @@ export interface Snapshot {
 /** Where the list comes from. Snapshots saved before 1.0.0 have no `kind`: discover. */
 type Source =
   | { kind?: "discover"; label: string; pageUrl: string; params: DiscoverSpec["params"]; sig: string | null }
-  | { kind: "artist"; label: string; pageUrl: string; bandId: number; sig: null };
+  | { kind: "artist"; label: string; pageUrl: string; bandId: number; sig: null }
+  /** "You may also like" of the release at pageUrl. */
+  | { kind: "recs"; label: string; pageUrl: string; sig: null };
 
 interface Current {
   itemIndex: number;
@@ -121,6 +125,8 @@ export class Player {
   private retried = false;
   /** Lyrics by track id; null when the track page has none. */
   private lyrics = new Map<number, string | null>();
+  /** "You may also like" by release page url. */
+  private recs = new Map<string, Recommendations>();
   private resumeAt = 0;
   private lastTick = 0;
   private listeners = new Set<(e: PlayerEvent) => void>();
@@ -138,6 +144,11 @@ export class Player {
       this.emit({ type: "time", time: a.currentTime, duration: a.duration || 0 });
     });
     a.on("error", () => void this.onAudioError());
+  }
+
+  /** Recommendations always play whole releases; the user's own mode stays saved for other lists. */
+  private get playMode(): Mode {
+    return this.source?.kind === "recs" ? "album" : this.mode;
   }
 
   async init(snapshot?: Snapshot | null): Promise<void> {
@@ -197,6 +208,10 @@ export class Player {
           return this.fetchNextPage();
         case "getLyrics":
           return this.getLyrics(c.itemIndex, c.trackId);
+        case "getRecs":
+          return this.getRecs(c.url);
+        case "playRecs":
+          return this.playRecs(c.url, c.index);
       }
     } catch (e) {
       this.error = errorMessage(e);
@@ -243,7 +258,7 @@ export class Player {
 
   private async fetchNextPage(): Promise<void> {
     const src = this.source;
-    if (!src || src.kind === "artist" || this.exhausted || this.loading) return;
+    if (!src || (src.kind && src.kind !== "discover") || this.exhausted || this.loading) return;
     this.loading = true;
     this.broadcast();
     try {
@@ -356,11 +371,11 @@ export class Player {
   // ---------- playback ----------
 
   private async trackFor(item: Item, pick: Pick): Promise<Track | null> {
-    if (this.mode === "track" && item.featured && typeof pick !== "number") return item.featured;
+    if (this.playMode === "track" && item.featured && typeof pick !== "number") return item.featured;
     const tracks = await this.loadTracks(item);
     if (!tracks.length) return null;
     if (typeof pick === "number") return tracks.find((t) => t.id === pick) ?? tracks[0] ?? null;
-    if (this.mode === "track") return item.featured ?? tracks[0] ?? null;
+    if (this.playMode === "track") return item.featured ?? tracks[0] ?? null;
     return (pick === "last" ? tracks[tracks.length - 1] : tracks[0]) ?? null;
   }
 
@@ -413,7 +428,7 @@ export class Player {
    */
   private async onEnded(): Promise<void> {
     const cur = this.current;
-    if (this.repeat && this.mode === "album" && cur) {
+    if (this.repeat && this.playMode === "album" && cur) {
       try {
         const tracks = await this.loadTracks(this.itemAt(cur.itemIndex));
         const idx = tracks.findIndex((t) => t.id === cur.track.id);
@@ -427,7 +442,7 @@ export class Player {
 
   async next(): Promise<void> {
     const cur = this.current;
-    if (this.mode === "album" && cur) {
+    if (this.playMode === "album" && cur) {
       try {
         const tracks = await this.loadTracks(this.itemAt(cur.itemIndex));
         const idx = tracks.findIndex((t) => t.id === cur.track.id);
@@ -447,7 +462,7 @@ export class Player {
       return;
     }
     const cur = this.current;
-    if (this.mode === "album" && cur) {
+    if (this.playMode === "album" && cur) {
       const tracks = this.itemAt(cur.itemIndex).tracks || [];
       const idx = tracks.findIndex((t) => t.id === cur.track.id);
       const previous = idx > 0 ? tracks[idx - 1] : undefined;
@@ -469,7 +484,7 @@ export class Player {
     try {
       const tracks = await this.loadTracks(this.itemAt(itemIndex));
       const track = tracks.find((t) => t.id === trackId);
-      if (!track?.hasLyrics || !canFetchLyrics(track.url)) return { text: null };
+      if (!track?.hasLyrics || !isBandcampPage(track.url)) return { text: null };
       const html = await this.env.fetchText(track.url).catch(() => undefined);
       if (html === undefined) return { error: "Could not load the lyrics. Try again later." };
       const text = parseLyrics(html);
@@ -478,6 +493,49 @@ export class Player {
     } catch (e) {
       return { error: errorMessage(e) };
     }
+  }
+
+  // ---------- you may also like ----------
+
+  private async loadRecs(url: string): Promise<Recommendations> {
+    const cached = this.recs.get(url);
+    if (cached) return cached;
+    if (!isBandcampPage(url)) throw new Error("Recommendations are only available for releases on bandcamp.com.");
+    const html = await this.env.fetchText(url).catch(() => undefined);
+    if (html === undefined) throw new Error("Could not load the recommendations. Try again later.");
+    const recs = parseRecommendations(html);
+    this.recs.set(url, recs);
+    return recs;
+  }
+
+  /** The releases a release page recommends, for the popup to list. Never throws, like getLyrics. */
+  private async getRecs(url: string): Promise<RecsResult> {
+    try {
+      const r = await this.loadRecs(url);
+      return { title: r.title, items: r.items.map((it) => ({ title: it.title, artist: it.artist, url: it.url, thumb: artUrl(it.artId, 3) })) };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
+  }
+
+  /** Makes a release page's recommendations the list and plays the chosen one, in full. */
+  private async playRecs(url: string, index: number): Promise<void> {
+    const r = await this.loadRecs(url);
+    if (!r.items.length) throw new Error("This release has no recommendations.");
+    const from = this.items.find((it) => it.url === url);
+    this.stop();
+    this.source = { kind: "recs", label: from ? `like ${from.title}` : "you may also like", pageUrl: url, sig: null };
+    // Copies: tracklists loaded while playing must not leak into the cached list.
+    this.items = r.items.map((it) => ({ ...it, tracks: null }));
+    this.cursor = null;
+    this.exhausted = true;
+    const base = this.baseOrder();
+    const start = base[Math.min(Math.max(index, 0), base.length - 1)]!;
+    this.order = this.shuffle ? [start, ...shuffled(base.filter((i) => i !== start), this.env.random)] : base;
+    this.pos = -1;
+    this.current = null;
+    this.error = null;
+    await this.playPos(this.order.indexOf(start));
   }
 
   /** Plays a specific track (or the default track) of a release from the list. */
@@ -641,12 +699,12 @@ export class Player {
     const known = (t: Track) => curItem?.tracks?.find((x) => x.id === t.id) ?? t;
     const wish = (t: Track) => {
       const k = known(t);
-      return { ...t, wishlisted: !!this.trackWish[t.id], hasLyrics: !!k.hasLyrics && canFetchLyrics(k.url) };
+      return { ...t, wishlisted: !!this.trackWish[t.id], hasLyrics: !!k.hasLyrics && isBandcampPage(k.url) };
     };
     return {
       source: this.source && { kind: this.source.kind ?? "discover", label: this.source.label, pageUrl: this.source.pageUrl, sig: this.source.sig },
       notice: this.notice,
-      mode: this.mode,
+      mode: this.playMode,
       shuffle: this.shuffle,
       repeat: this.repeat,
       artistOrder: this.artistOrder,
@@ -668,6 +726,7 @@ export class Player {
                 url: curItem.url,
                 art: artUrl(curItem.artId, 2),
                 year: curItem.year ?? null,
+                hasRecs: isBandcampPage(curItem.url) && /\/(album|track)\//.test(curItem.url),
                 wishlisted: curItem.wishlisted,
                 owned: curItem.owned,
                 tracks: curItem.tracks && curItem.tracks.map(wish),

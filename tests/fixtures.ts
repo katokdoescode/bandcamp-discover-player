@@ -47,6 +47,30 @@ export function trackPage(lyrics: string): string {
   return `<html><head><script type="application/ld+json">\n${ld}\n</script></head><body><script data-tralbum="${tralbum}"></script></body></html>`;
 }
 
+/** A release page whose "you may also like" section lists releases `ids` (shaped like Bandcamp's markup). */
+export function recsPage(ids: number[], band = "DICKWEED"): string {
+  const li = (id: number) => `
+    <li class="recommended-album footer-nn"
+      id="id-${id}"
+      data-trackid="${id * 10}"
+      data-audiourl="{&quot;mp3-128&quot;:&quot;https://bandcamp.com/stream_redirect?enc=mp3-128&amp;track_id=${id * 10}&quot;}"
+      data-albumtitle="Release ${id} &amp; Friends"
+      data-albumid="${id}"
+      data-artist="Band ${id}"
+      data-artistid="${1000 + id}"
+      data-from="footer-nn-a1">
+      <div class="album-art-container">
+        <picture><source srcset="https://f4.bcbits.com/img/a${5000 + id}_1x1_120.jpg 1x" type="image/avif" /></picture>
+      </div>
+      <a class="album-link" href="https://band${id}.bandcamp.com/album/r${id}?from=footer-nn-a1">
+        <img class="album-art" src="https://f4.bcbits.com/img/a${5000 + id}_1x1_120.jpg" />
+      </a>
+    </li>`;
+  return `<html><body><div id="recommendations_container"><div class="recs-section bc-recs">
+    <h2 class="section-title">If you like ${band}, you may also like:</h2>
+    <ul>${ids.map(li).join("")}</ul></div></div></body></html>`;
+}
+
 export const ARTIST: ArtistSpec = { kind: "artist", pageUrl: "https://someband.bandcamp.com/music", label: "Some Band", bandId: 77 };
 
 /** band_details discography entry for release `id`, released on `date`. */
