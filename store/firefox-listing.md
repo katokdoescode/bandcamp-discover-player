@@ -77,9 +77,11 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 ## Release notes
 
-### 0.4.0
+### 1.0.0
 
-The list loads more releases by itself when you scroll near its end.
+<!-- Each feature merged into release/1.0.0 adds its line here. -->
+
+- The list loads more releases by itself when you scroll near its end.
 
 ### 0.3.0
 
