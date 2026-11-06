@@ -46,7 +46,8 @@ In Chrome, unzip one and load the folder as above.
 ## Features
 
 - **play this page** — plays exactly the releases shown on the open discover page
-  (including those loaded with "View more results"), then keeps loading more.
+  (including those loaded with "View more results"), then loads more by itself
+  when you scroll near the end of the list or playback gets there.
 - **one track per release** / **full releases** — one track from each release, or every release in full.
 - **shuffle** — shuffles releases; tracks within a release stay in order.
 - The release year is shown next to the artist and in the list.

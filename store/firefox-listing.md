@@ -23,7 +23,7 @@ How to use it:
 2. Click the toolbar icon and press "play this page".
 
 Features:
-- Plays exactly the releases the page shows, including ones loaded with "View more results", and keeps loading more when the list runs out.
+- Plays exactly the releases the page shows, including ones loaded with "View more results", and loads more by itself as you scroll or listen to the end.
 - Two modes: one track per release, or every release in full.
 - Shuffle the order of releases (tracks inside a release stay in order).
 - Shows the release year next to the artist and in the list.
@@ -76,6 +76,10 @@ Permissions:
 The content script on bandcamp.com uses `content.fetch` to make same-origin requests as the page (release tracklists, and wishlist add/remove, which only happens when the user clicks a heart). No remote code is loaded or executed; no data is sent anywhere except to Bandcamp.
 
 ## Release notes
+
+### 0.4.0
+
+The list loads more releases by itself when you scroll near its end.
 
 ### 0.3.0
 
