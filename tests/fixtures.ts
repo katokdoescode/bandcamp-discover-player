@@ -1,6 +1,6 @@
 import type { AudioEvent, AudioPort, PlayerEnv } from "@/lib/player";
 import { Player } from "@/lib/player";
-import type { Capture, ContentMessage, DiscoverResult, DiscoverSpec, Settings } from "@/lib/types";
+import type { ArtistSpec, Capture, ContentMessage, DiscoverResult, DiscoverSpec, Settings } from "@/lib/types";
 
 /** A discover_web result whose featured track is `id * 10`. */
 export function result(id: number, extra: Partial<DiscoverResult> = {}): DiscoverResult {
@@ -45,6 +45,24 @@ export function trackPage(lyrics: string): string {
   const ld = JSON.stringify({ "@type": "MusicRecording", recordingOf: { lyrics: { "@type": "CreativeWork", text: lyrics } } });
   const tralbum = JSON.stringify({ trackinfo: [{ lyrics }] }).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   return `<html><head><script type="application/ld+json">\n${ld}\n</script></head><body><script data-tralbum="${tralbum}"></script></body></html>`;
+}
+
+export const ARTIST: ArtistSpec = { kind: "artist", pageUrl: "https://someband.bandcamp.com/music", label: "Some Band", bandId: 77 };
+
+/** band_details discography entry for release `id`, released on `date`. */
+export function disco(id: number, date: string | null, extra: Record<string, unknown> = {}) {
+  return { item_id: id, item_type: "album", title: `Release ${id}`, artist_name: null, band_name: "Some Band", band_id: 77, art_id: 9000 + id, release_date: date, ...extra };
+}
+
+/** API answering band_details with `discography`, and the default tralbum_details. */
+export function artistApi(discography: unknown[]) {
+  const base = defaultApi();
+  return (url: string, body?: any) => {
+    if (url.includes("band_details")) return body?.band_id === 77 ? { discography } : undefined;
+    const d = base(url) as any;
+    const m = /tralbum_id=(\d+)/.exec(url);
+    return m && d ? { ...d, bandcamp_url: `https://someband.bandcamp.com/album/r${m[1]}`, featured_track_id: Number(m[1]) * 10 + 1 } : d;
+  };
 }
 
 export function capture(ids: number[], cursor: string | null = null): Capture {
@@ -110,6 +128,8 @@ export interface Setup {
   settings?: Partial<Settings>;
   /** Track ids whose tralbum_details say has_lyrics. */
   lyrics?: number[];
+  /** The tab is this artist's page (use with spec: null). */
+  artist?: ArtistSpec;
   /** HTML of pages by URL, for fetchText. */
   pages?: Record<string, string>;
 }
@@ -144,6 +164,8 @@ export async function setup(o: Setup = {}) {
       switch (msg.type) {
         case "getDiscoverSpec":
           return state.spec as any;
+        case "getArtistSpec":
+          return (o.artist ?? null) as any;
         case "getFanId":
           return state.fanId as any;
         case "setWishlisted":

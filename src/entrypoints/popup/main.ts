@@ -1,9 +1,9 @@
 import { browser, type Browser } from "wxt/browser";
 import { request } from "@/lib/messaging";
-import type { DiscoverSpec, LyricsResult, PlayerCommand, PlayerEvent, PublicState } from "@/lib/types";
+import type { LyricsResult, PageSpec, PlayerCommand, PlayerEvent, PublicState } from "@/lib/types";
 import { formatTime as fmt, shouldAutoLoad } from "@/lib/util";
 
-type TabSpec = DiscoverSpec & { sig: string | null };
+type TabSpec = PageSpec & { sig: string | null };
 type Reply = { type: "reply"; reqId: number; result?: unknown; error?: string };
 type Command = PlayerCommand extends infer C ? (C extends { cmd: infer K } ? Omit<C, "cmd"> & { cmd: K } : never) : never;
 
@@ -11,7 +11,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 let port: Browser.runtime.Port | null = null;
 let state: PublicState | null = null;
-let tabSpec: TabSpec | null = null; // discover filters of the active tab, if it is a discover page
+let tabSpec: TabSpec | null = null; // what the active tab shows, if it is a discover or artist page
 let activeTabId: number | null = null;
 let queueKey = "";
 let dragging = false;
@@ -120,8 +120,9 @@ function render(): void {
   const reloaded = samePage && !!tabSpec!.sig && tabSpec!.sig !== state.source!.sig;
   $("banner").hidden = !tabSpec || (samePage && !reloaded);
   if (tabSpec) $("bannerSpec").textContent = tabSpec.label;
-  $("bannerLabel").textContent = reloaded ? "this page has new releases" : "this page";
-  $("loadBtn").textContent = reloaded ? "update list" : "play this page";
+  const artistTab = tabSpec?.kind === "artist";
+  $("bannerLabel").textContent = artistTab ? "this artist" : reloaded ? "this page has new releases" : "this page";
+  $("loadBtn").textContent = artistTab ? "play all releases" : reloaded ? "update list" : "play this page";
   $<HTMLButtonElement>("loadBtn").disabled = state.loading;
   $("notice").hidden = state.notice !== "login";
   $("empty").hidden = !!state.source || !!tabSpec;
@@ -161,7 +162,12 @@ function render(): void {
   status.classList.toggle("error", !!state.error);
   status.textContent = state.error || "loading releases…";
 
-  $("count").textContent = state.queue.length ? `${state.queue.length} releases${state.hasMore ? "" : " · end of results"}` : "";
+  const artist = state.source?.kind === "artist";
+  const n = state.queue.length;
+  $("count").textContent = n ? `${n} ${n === 1 ? "release" : "releases"}${artist || state.hasMore ? "" : " · end of results"}` : "";
+  const sort = $("sortBtn");
+  sort.hidden = !artist || state.shuffle; // shuffled, the order does not matter
+  sort.textContent = state.artistOrder === "oldest" ? "oldest first ⇅" : "newest first ⇅";
   const more = $<HTMLButtonElement>("moreBtn");
   more.hidden = !state.hasMore;
   more.disabled = state.loading;
@@ -344,6 +350,9 @@ $("playBtn").addEventListener("click", () => void send({ cmd: "togglePlay" }));
 $("nextBtn").addEventListener("click", () => void send({ cmd: "next" }));
 $("prevBtn").addEventListener("click", () => void send({ cmd: "prev" }));
 $("moreBtn").addEventListener("click", () => void send({ cmd: "loadMore" }));
+$("sortBtn").addEventListener("click", () => {
+  if (state) void send({ cmd: "setArtistOrder", order: state.artistOrder === "oldest" ? "newest" : "oldest" });
+});
 $("queue").addEventListener("scroll", maybeAutoLoad, { passive: true });
 $("noticeClose").addEventListener("click", () => void send({ cmd: "dismissNotice" }));
 $("relWish").addEventListener("click", (e) => {
@@ -403,7 +412,8 @@ document.addEventListener("keydown", (e) => {
 
 async function inspectActiveTab(): Promise<void> {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id != null && /^https?:\/\/bandcamp\.com\/discover/.test(tab.url || "")) {
+  // Discover pages on bandcamp.com, or an artist's / label's own <name>.bandcamp.com pages.
+  if (tab?.id != null && /^https?:\/\/(bandcamp\.com\/discover|[^/]+\.bandcamp\.com\/)/.test(tab.url || "")) {
     activeTabId = tab.id;
     tabSpec = await send<TabSpec | null>({ cmd: "inspectTab", tabId: tab.id }).catch(() => null);
   }

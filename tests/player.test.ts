@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { OWN_MARK } from "@/lib/bandcamp";
 import { Player } from "@/lib/player";
-import { capture, defaultApi, result, setup, trackPage, trackUrl } from "./fixtures";
+import { ARTIST, artistApi, capture, defaultApi, disco, result, setup, trackPage, trackUrl } from "./fixtures";
 
 const TAB = 7;
 const playing = (audio: { src: string }) => audio.src;
@@ -56,9 +56,9 @@ describe("loading a discover page", () => {
     expect(view().current!.release.year).toBe(2024);
   });
 
-  it("refuses pages that aren't discover pages", async () => {
+  it("refuses pages that are neither discover nor artist pages", async () => {
     const { player } = await setup({ spec: null });
-    await expect(player.handle({ cmd: "loadFromTab", tabId: TAB })).rejects.toThrow("not a Bandcamp discover page");
+    await expect(player.handle({ cmd: "loadFromTab", tabId: TAB })).rejects.toThrow("not a Bandcamp discover or artist page");
   });
 
   it("reports the tab's filters and which list it shows", async () => {
@@ -261,6 +261,69 @@ describe("lyrics", () => {
     await player.handle({ cmd: "setMode", mode: "album" });
     await player.handle({ cmd: "loadFromTab", tabId: TAB });
     expect(view().current!.release.tracks!.map((t) => t.hasLyrics)).toEqual([false, true, false]);
+  });
+});
+
+describe("an artist's releases", () => {
+  const discography = [
+    disco(1, "05 Mar 2021 00:00:00 GMT"),
+    disco(2, "30 Oct 2026 00:00:00 GMT"),
+    disco(3, null),
+    disco(4, "16 Mar 2019 00:00:00 GMT", { item_type: "track", artist_name: "Guest" }),
+  ];
+  const artistSetup = (o: Parameters<typeof setup>[0] = {}) => setup({ spec: null, artist: ARTIST, api: artistApi(discography), ...o });
+
+  it("plays the whole discography, newest first, undated last", async () => {
+    const { player, view, audio } = await artistSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().source).toMatchObject({ kind: "artist", label: "Some Band", pageUrl: ARTIST.pageUrl });
+    expect(view().queue.map((q) => q.title)).toEqual(["Release 2", "Release 1", "Release 4", "Release 3"]);
+    expect(view().queue[2]).toMatchObject({ artist: "Guest", year: 2019 });
+    // Featured track and the release's own link come with its tracklist.
+    await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/21?fresh=0"));
+    expect(view().current!.release.url).toBe("https://someband.bandcamp.com/album/r2");
+    expect(view().hasMore).toBe(false);
+  });
+
+  it("can play oldest first, and re-sorts without interrupting the current track", async () => {
+    const { player, view, audio, settings } = await artistSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "next" }); // Release 1
+    const before = playing(audio);
+    await player.handle({ cmd: "setArtistOrder", order: "oldest" });
+    expect(settings.artistOrder).toBe("oldest");
+    expect(view().queue.map((q) => q.title)).toEqual(["Release 4", "Release 1", "Release 2", "Release 3"]);
+    expect(playing(audio)).toBe(before);
+    await player.handle({ cmd: "next" });
+    expect(view().current!.release.title).toBe("Release 2");
+  });
+
+  it("starts with the saved order", async () => {
+    const { player, view } = await artistSetup({ settings: { artistOrder: "oldest" } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().queue[0]!.title).toBe("Release 4");
+  });
+
+  it("never asks discover for more", async () => {
+    const { player, apiCalls } = await artistSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "loadMore" });
+    for (let i = 0; i < 4; i++) await player.handle({ cmd: "next" });
+    expect(apiCalls.some((c) => c.url.includes("discover_web"))).toBe(false);
+  });
+
+  it("goes back to date order when shuffle is turned off", async () => {
+    const { player, view } = await artistSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "setShuffle", on: true });
+    await player.handle({ cmd: "setShuffle", on: false });
+    expect(view().queue.map((q) => q.title)).toEqual(["Release 2", "Release 1", "Release 4", "Release 3"]);
+    expect(view().pos).toBe(0);
+  });
+
+  it("is offered on artist pages", async () => {
+    const { player } = await artistSetup();
+    await expect(player.handle({ cmd: "inspectTab", tabId: TAB })).resolves.toMatchObject({ kind: "artist", label: "Some Band", sig: null });
   });
 });
 

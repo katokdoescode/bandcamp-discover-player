@@ -50,6 +50,8 @@ In Chrome, unzip one and load the folder as above.
   when you scroll near the end of the list or playback gets there.
 - **one track per release** / **full releases** — one track from each release, or every release in full.
 - **shuffle** — shuffles releases; tracks within a release stay in order.
+- **play all releases** — on an artist's or label's own `<name>.bandcamp.com` pages (home, music, album or track):
+  their whole discography, newest or oldest first.
 - **repeat** (beta, full releases only) — loops the current release; next/previous still leave it.
 - **lyrics** — shown in place of the list for tracks that have them (in both modes); they follow the playing track.
 - The release year is shown next to the artist and in the list.
@@ -136,6 +138,7 @@ tests/                       Vitest
 Bandcamp endpoints used:
 - `POST /api/discover/1/discover_web` — discover results;
 - `GET /api/mobile/25/tralbum_details` — a release's tracklist with mp3-128 links;
+- `POST /api/mobile/25/band_details` — an artist's or label's discography;
 - track pages on `*.bandcamp.com` — lyrics text (read from the page's ld+json);
 - `POST /collect_item_cb`, `/uncollect_item_cb` — wishlist, same as the site's button.
 
