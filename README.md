@@ -8,6 +8,41 @@ player on a Bandcamp release page.
 > Unofficial; not affiliated with Bandcamp. It uses the internal APIs that
 > Bandcamp's own pages use, so it may break if Bandcamp changes them.
 
+![The player over a Bandcamp discover page](docs/screenshots/discover-page.jpg)
+
+## Install
+
+- **Firefox:** [Discover Player for Bandcamp on addons.mozilla.org](https://addons.mozilla.org/addon/discover-player-for-bandcamp/)
+- **Chrome:** not in the Chrome Web Store yet. Install it from source (see below).
+
+Then open any `bandcamp.com/discover/...` page and click the extension's toolbar icon.
+
+<p>
+  <img src="docs/screenshots/popup-one-track.png" alt="One track per release" width="380">
+  <img src="docs/screenshots/popup-full-releases.png" alt="Full releases" width="380">
+</p>
+
+### Install from source
+
+Requires Node.js 22+ and git.
+
+```bash
+git clone https://github.com/katokdoescode/bandcamp-discover-player.git
+```
+
+```bash
+cd bandcamp-discover-player && npm ci && npm run build && npm run build:firefox
+```
+
+- **Chrome:** open `chrome://extensions`, turn on Developer mode, click "Load unpacked"
+  and choose `.output/chrome-mv3`.
+- **Firefox:** open `about:debugging#/runtime/this-firefox`, click "Load Temporary Add-on…"
+  and choose `.output/firefox-mv2/manifest.json`. Firefox removes temporary add-ons on
+  restart; for permanent use install it from addons.mozilla.org.
+
+Ready-made zips are also attached to each [GitHub release](https://github.com/katokdoescode/bandcamp-discover-player/releases).
+In Chrome, unzip one and load the folder as above.
+
 ## Features
 
 - **play this page** — plays exactly the releases shown on the open discover page
