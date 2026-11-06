@@ -67,10 +67,16 @@
       <button class="tab" data-mode="track" role="tab">one track per release</button>
       <button class="tab" data-mode="album" role="tab">full releases</button>
     </div>
-    <label class="shuffle" title="shuffle releases">
-      <input type="checkbox" id="shuffle">
-      <span class="shuffle-icon"></span>shuffle
-    </label>
+    <div class="toggles">
+      <label class="toggle repeat" id="repeatToggle" title="repeat the current release (beta)">
+        <input type="checkbox" id="repeat">
+        <span class="icon repeat-icon"></span>repeat<sup class="beta">beta</sup>
+      </label>
+      <label class="toggle shuffle" title="shuffle releases">
+        <input type="checkbox" id="shuffle">
+        <span class="icon shuffle-icon"></span>shuffle
+      </label>
+    </div>
   </nav>
 
   <div class="status" id="status" hidden></div>

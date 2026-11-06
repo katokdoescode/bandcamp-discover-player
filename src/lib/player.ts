@@ -89,6 +89,7 @@ export class Player {
   private current: Current | null = null;
   private mode: Mode = "track";
   private shuffle = false;
+  private repeat = false;
   private loading = false;
   private error: string | null = null;
   private notice: "login" | null = null;
@@ -104,7 +105,7 @@ export class Player {
 
   constructor(private env: PlayerEnv) {
     const a = env.audio;
-    a.on("ended", () => void this.next());
+    a.on("ended", () => void this.onEnded());
     a.on("play", () => this.broadcast());
     a.on("pause", () => this.broadcast());
     a.on("loadedmetadata", () => this.broadcast());
@@ -121,6 +122,7 @@ export class Player {
     const s = await this.env.settings.load().catch(() => ({}) as Partial<Settings>);
     if (s.mode === "track" || s.mode === "album") this.mode = s.mode;
     if (typeof s.shuffle === "boolean") this.shuffle = s.shuffle;
+    if (typeof s.repeat === "boolean") this.repeat = s.repeat;
     if (snapshot) this.restore(snapshot);
   }
 
@@ -153,6 +155,11 @@ export class Player {
           return this.playTrack(c.itemIndex, c.trackId);
         case "setShuffle":
           return this.setShuffle(c.on);
+        case "setRepeat":
+          this.repeat = c.on;
+          void this.env.settings.save({ repeat: c.on });
+          this.broadcast();
+          return;
         case "setMode":
           return this.setMode(c.mode);
         case "toggleWishlist":
@@ -318,6 +325,24 @@ export class Player {
     this.retried = false;
     a.play().catch(() => {});
     this.broadcast();
+  }
+
+  /**
+   * A track finished. With repeat on in full releases mode, the last track of a release
+   * loops back to its first; otherwise (and for manual next/prev) playback moves on.
+   */
+  private async onEnded(): Promise<void> {
+    const cur = this.current;
+    if (this.repeat && this.mode === "album" && cur) {
+      try {
+        const tracks = await this.loadTracks(this.itemAt(cur.itemIndex));
+        const idx = tracks.findIndex((t) => t.id === cur.track.id);
+        if (idx >= 0 && idx === tracks.length - 1) return this.playTrack(cur.itemIndex, tracks[0]!.id);
+      } catch {
+        // fall through to the next track
+      }
+    }
+    return this.next();
   }
 
   async next(): Promise<void> {
@@ -519,6 +544,7 @@ export class Player {
       notice: this.notice,
       mode: this.mode,
       shuffle: this.shuffle,
+      repeat: this.repeat,
       loading: this.loading,
       error: this.error,
       hasMore: !this.exhausted,

@@ -146,6 +146,8 @@ function render(): void {
   $("playBtn").classList.toggle("playing", !!cur && !state.paused);
   document.querySelectorAll<HTMLElement>(".tab").forEach((t) => t.classList.toggle("active", t.dataset.mode === state!.mode));
   $<HTMLInputElement>("shuffle").checked = state.shuffle;
+  $<HTMLInputElement>("repeat").checked = state.repeat;
+  $("repeatToggle").hidden = state.mode !== "album"; // looping a release only makes sense when playing it in full
 
   const status = $("status");
   status.hidden = !state.error && !(state.loading && !state.queue.length);
@@ -274,6 +276,7 @@ $("relWish").addEventListener("click", (e) => {
 $("trackWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex, state.current.track.id);
 });
+$<HTMLInputElement>("repeat").addEventListener("change", (e) => void send({ cmd: "setRepeat", on: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>("shuffle").addEventListener("change", (e) => void send({ cmd: "setShuffle", on: (e.target as HTMLInputElement).checked }));
 document.querySelectorAll<HTMLElement>(".tab").forEach((t) =>
   t.addEventListener("click", () => void send({ cmd: "setMode", mode: t.dataset.mode === "album" ? "album" : "track" })),
