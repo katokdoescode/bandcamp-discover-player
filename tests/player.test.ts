@@ -174,6 +174,53 @@ describe("full releases", () => {
   });
 });
 
+describe("repeat release (beta)", () => {
+  async function albumWithRepeat() {
+    const ctx = await setup({ capture: capture([1, 2]) });
+    await ctx.player.handle({ cmd: "setMode", mode: "album" });
+    await ctx.player.handle({ cmd: "setRepeat", on: true });
+    await ctx.player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await ctx.player.handle({ cmd: "playTrack", itemIndex: 0, trackId: 12 });
+    return ctx;
+  }
+
+  it("loops back to the first track when the release's last track ends", async () => {
+    const { audio, view } = await albumWithRepeat();
+    audio.fire("ended");
+    await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/10?fresh=0"));
+    expect(view().repeat).toBe(true);
+  });
+
+  it("moves on through the tracks before the last one as usual", async () => {
+    const { player, audio } = await albumWithRepeat();
+    await player.handle({ cmd: "playTrack", itemIndex: 0, trackId: 10 });
+    audio.fire("ended");
+    await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/11?fresh=0"));
+  });
+
+  it("lets next leave the loop for the next release", async () => {
+    const { player, audio } = await albumWithRepeat();
+    await player.handle({ cmd: "next" });
+    expect(playing(audio)).toBe("https://stream/20?fresh=0");
+  });
+
+  it("has no effect in one track per release mode", async () => {
+    const { player, audio } = await setup({ capture: capture([1, 2]) });
+    await player.handle({ cmd: "setRepeat", on: true });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    audio.fire("ended");
+    await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/20"));
+  });
+
+  it("is remembered between sessions", async () => {
+    const { player, settings } = await setup();
+    await player.handle({ cmd: "setRepeat", on: true });
+    expect(settings.repeat).toBe(true);
+    const next = await setup({ settings: { repeat: true } });
+    expect(next.view().repeat).toBe(true);
+  });
+});
+
 describe("shuffle", () => {
   it("keeps the current release first and shuffles the rest", async () => {
     const { player, view, settings } = await setup({ capture: capture([1, 2, 3]) });

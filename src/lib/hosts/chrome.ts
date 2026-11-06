@@ -9,7 +9,7 @@ import { applyDiscoverResponse } from "../captures";
 import { COMMANDS } from "../host";
 import { listen, notify, request, requestTab } from "../messaging";
 import type { Snapshot } from "../player";
-import type { Capture, ContentMessage, Settings } from "../types";
+import { SETTINGS_KEYS, type Capture, type ContentMessage, type Settings } from "../types";
 
 const OFFSCREEN_PATH = "/offscreen.html";
 const captureKey = (tabId: number) => `capture:${tabId}`;
@@ -63,7 +63,7 @@ export function startChromeServiceWorker(): void {
       const key = captureKey(tabId);
       return (await browser.storage.session.get(key))[key];
     },
-    loadSettings: () => browser.storage.local.get(["mode", "shuffle"]),
+    loadSettings: () => browser.storage.local.get([...SETTINGS_KEYS]),
     saveSettings: (s) => browser.storage.local.set(s),
     async loadSnapshot() {
       return (await browser.storage.session.get(SNAPSHOT_KEY))[SNAPSHOT_KEY] ?? null;
