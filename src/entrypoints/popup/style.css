@@ -300,7 +300,17 @@ a.bc-button { display: inline-flex; align-items: center; text-decoration: none; 
 .toggle input { display: none; }
 .toggle .icon { width: 14px; height: 12px; background-repeat: no-repeat; background-position: center; }
 .toggle:has(input:checked) { color: var(--link); font-weight: 700; }
-.toggle .beta { margin-left: 1px; font-size: 8px; font-weight: 400; text-transform: uppercase; color: var(--muted); }
+/* small icon button at the end of the "by Artist · year" line */
+.toggle.repeat {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-left: 8px;
+  padding: 2px 5px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+.toggle.repeat:hover { border-color: var(--muted); }
+.toggle.repeat:has(input:checked) { border-color: var(--link); }
 
 .shuffle-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12' fill='none' stroke='%23999' stroke-width='1.4'%3E%3Cpath d='M0 2.5h3c3 0 4 7 7 7h3M0 9.5h3c3 0 4-7 7-7h3M11 .5l2 2-2 2M11 7.5l2 2-2 2'/%3E%3C/svg%3E"); }
 .shuffle:has(input:checked) .shuffle-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12' fill='none' stroke='%230687f5' stroke-width='1.6'%3E%3Cpath d='M0 2.5h3c3 0 4 7 7 7h3M0 9.5h3c3 0 4-7 7-7h3M11 .5l2 2-2 2M11 7.5l2 2-2 2'/%3E%3C/svg%3E"); }
