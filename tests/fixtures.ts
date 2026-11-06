@@ -21,8 +21,8 @@ export function result(id: number, extra: Partial<DiscoverResult> = {}): Discove
   };
 }
 
-/** tralbum_details for release `id`: tracks id*10, id*10+1, id*10+2. */
-export function details(id: number, count = 3) {
+/** tralbum_details for release `id`: tracks id*10, id*10+1, id*10+2; `lyrics` lists track ids that have lyrics. */
+export function details(id: number, count = 3, lyrics: number[] = []) {
   return {
     tralbum_artist: `Band ${id}`,
     tracks: Array.from({ length: count }, (_, i) => ({
@@ -32,8 +32,19 @@ export function details(id: number, count = 3) {
       duration: 60,
       is_streamable: true,
       streaming_url: { "mp3-128": `https://stream/${id * 10 + i}?fresh=0` },
+      has_lyrics: lyrics.includes(id * 10 + i),
+      track_url: trackUrl(id * 10 + i),
     })),
   };
+}
+
+export const trackUrl = (trackId: number) => `https://band${Math.floor(trackId / 10)}.bandcamp.com/track/t${trackId}`;
+
+/** A Bandcamp track page carrying `lyrics` the way the real one does (ld+json and data-tralbum). */
+export function trackPage(lyrics: string): string {
+  const ld = JSON.stringify({ "@type": "MusicRecording", recordingOf: { lyrics: { "@type": "CreativeWork", text: lyrics } } });
+  const tralbum = JSON.stringify({ trackinfo: [{ lyrics }] }).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  return `<html><head><script type="application/ld+json">\n${ld}\n</script></head><body><script data-tralbum="${tralbum}"></script></body></html>`;
 }
 
 export function capture(ids: number[], cursor: string | null = null): Capture {
@@ -97,15 +108,19 @@ export interface Setup {
   silent?: number[];
   /** Settings saved by an earlier session. */
   settings?: Partial<Settings>;
+  /** Track ids whose tralbum_details say has_lyrics. */
+  lyrics?: number[];
+  /** HTML of pages by URL, for fetchText. */
+  pages?: Record<string, string>;
 }
 
 /** Default API: tralbum_details per release id, discover_web → no more results. */
-export function defaultApi(silent: number[] = []) {
+export function defaultApi(silent: number[] = [], lyrics: number[] = []) {
   return (url: string) => {
     const m = /tralbum_id=(\d+)/.exec(url);
     if (m) {
       const id = Number(m[1]);
-      return details(id, silent.includes(id) ? 0 : 3);
+      return details(id, silent.includes(id) ? 0 : 3, lyrics);
     }
     if (url.includes("discover_web")) return { results: [], cursor: null };
     return undefined;
@@ -118,7 +133,8 @@ export async function setup(o: Setup = {}) {
   const apiCalls: { url: string; body?: any }[] = [];
   const settings: Partial<Settings> = { ...o.settings };
   const state = { capture: o.capture, spec: o.spec === undefined ? SPEC : o.spec, fanId: o.fanId ?? null };
-  const api = o.api ?? defaultApi(o.silent);
+  const api = o.api ?? defaultApi(o.silent, o.lyrics);
+  const pageCalls: string[] = [];
 
   const env: PlayerEnv = {
     audio,
@@ -140,6 +156,10 @@ export async function setup(o: Setup = {}) {
       apiCalls.push({ url, body });
       return api(url, body);
     },
+    async fetchText(url) {
+      pageCalls.push(url);
+      return o.pages?.[url];
+    },
     getCapture: async () => state.capture,
     settings: {
       load: async () => ({ ...settings }),
@@ -150,5 +170,5 @@ export async function setup(o: Setup = {}) {
   };
   const player = new Player(env);
   await player.init();
-  return { player, audio, sent, apiCalls, settings, state, view: () => player.publicState() };
+  return { player, audio, sent, apiCalls, pageCalls, settings, state, view: () => player.publicState() };
 }

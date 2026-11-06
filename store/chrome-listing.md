@@ -22,6 +22,7 @@ Features:
 - Two modes: one track per release, or every release in full.
 - Shuffle the order of releases (tracks inside a release stay in order).
 - Repeat (beta): loop the release you are listening to in full.
+- Read the lyrics of the playing track, when the artist has added them.
 - Shows the release year next to the artist and in the list.
 - Reloaded the page or changed filters? The player offers to update its list, and the current track keeps playing.
 - Add releases or single tracks to your Bandcamp wishlist with the heart button (you need to be logged in on bandcamp.com).

@@ -27,6 +27,7 @@ Features:
 - Two modes: one track per release, or every release in full.
 - Shuffle the order of releases (tracks inside a release stay in order).
 - Repeat (beta): loop the release you are listening to in full.
+- Read the lyrics of the playing track, when the artist has added them.
 - Shows the release year next to the artist and in the list.
 - Reloaded the page or changed filters? The player offers to update its list, and the current track keeps playing.
 - Add releases or single tracks to your Bandcamp wishlist with the heart button (you need to be logged in on bandcamp.com).
@@ -84,6 +85,7 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 - The list loads more releases by itself when you scroll near its end.
 - Repeat (beta) in full releases mode loops the current release; next and previous still move between releases.
+- Lyrics: tracks that have them show a "lyrics" link; the text opens in place of the list.
 
 ### 0.3.0
 

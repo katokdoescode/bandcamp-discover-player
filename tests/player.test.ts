@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { OWN_MARK } from "@/lib/bandcamp";
 import { Player } from "@/lib/player";
-import { capture, defaultApi, result, setup } from "./fixtures";
+import { capture, defaultApi, result, setup, trackPage, trackUrl } from "./fixtures";
 
 const TAB = 7;
 const playing = (audio: { src: string }) => audio.src;
@@ -218,6 +218,49 @@ describe("repeat release (beta)", () => {
     expect(settings.repeat).toBe(true);
     const next = await setup({ settings: { repeat: true } });
     expect(next.view().repeat).toBe(true);
+  });
+});
+
+describe("lyrics", () => {
+  const pages = { [trackUrl(11)]: trackPage("line one\nline two") };
+
+  it("loads a track's lyrics from its page once", async () => {
+    const { player, pageCalls } = await setup({ capture: capture([1]), lyrics: [11], pages });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await expect(player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 11 })).resolves.toEqual({ text: "line one\nline two" });
+    await player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 11 });
+    expect(pageCalls).toEqual([trackUrl(11)]);
+  });
+
+  it("does not ask for tracks without lyrics", async () => {
+    const { player, pageCalls } = await setup({ capture: capture([1]), lyrics: [11], pages });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await expect(player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 10 })).resolves.toEqual({ text: null });
+    expect(pageCalls).toEqual([]);
+  });
+
+  it("reports a page that could not be loaded, and tries again next time", async () => {
+    const { player, pageCalls, view } = await setup({ capture: capture([1]), lyrics: [11], pages: {} });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await expect(player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 11 })).resolves.toEqual({ error: expect.stringContaining("Could not load the lyrics") });
+    expect(view().error).toBeNull(); // not the player's error line
+    await player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 11 });
+    expect(pageCalls).toHaveLength(2);
+  });
+
+  it("learns whether the featured track has lyrics from the release's tracklist", async () => {
+    const c = capture([1]);
+    c.results[0]!.featured_track!.id = 11;
+    const { player, view } = await setup({ capture: c, lyrics: [11], pages });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.track.hasLyrics).toBe(true));
+  });
+
+  it("marks the tracks with lyrics in a release played in full", async () => {
+    const { player, view } = await setup({ capture: capture([1]), lyrics: [11], pages });
+    await player.handle({ cmd: "setMode", mode: "album" });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().current!.release.tracks!.map((t) => t.hasLyrics)).toEqual([false, true, false]);
   });
 });
 

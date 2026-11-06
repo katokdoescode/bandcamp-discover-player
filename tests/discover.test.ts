@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { artUrl, isPageDiscoverRequest, normalizeResults, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
+import { artUrl, canFetchLyrics, isPageDiscoverRequest, parseLyrics, normalizeResults, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
 import { applyDiscoverResponse } from "@/lib/captures";
 import { parseDiscoverSpec } from "@/lib/discover-spec";
 import { AUTO_LOAD_MARGIN, formatTime, range, shouldAutoLoad, shuffled } from "@/lib/util";
-import { capture, details, result } from "./fixtures";
+import { capture, details, result, trackPage } from "./fixtures";
 
 describe("parseDiscoverSpec", () => {
   it("builds the same request body as the discover page", () => {
@@ -142,6 +142,29 @@ describe("bandcamp helpers", () => {
     });
     expect(normalizeResults([result(1)])[0]).toEqual(result(1));
     expect(normalizeResults(undefined)).toEqual([]);
+  });
+
+  it("reads lyrics from a track page", () => {
+    const text = "I invented a taste\nWhy did you miss it? \"Rock & roll\" <3";
+    expect(parseLyrics(trackPage(text))).toBe(text);
+    // Without ld+json, the data-tralbum attribute has the same text, HTML-escaped.
+    const noLd = trackPage(text).replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/, "");
+    expect(parseLyrics(noLd)).toBe(text);
+    expect(parseLyrics(trackPage("  \r\n "))).toBeNull();
+    expect(parseLyrics("<html>Client Challenge</html>")).toBeNull();
+  });
+
+  it("fetches lyrics only from Bandcamp's own domains", () => {
+    expect(canFetchLyrics("https://twistedteens.bandcamp.com/track/why")).toBe(true);
+    expect(canFetchLyrics("https://music.someband.com/track/why")).toBe(false);
+    expect(canFetchLyrics("https://evilbandcamp.com/track/why")).toBe(false);
+    expect(canFetchLyrics(undefined)).toBe(false);
+  });
+
+  it("keeps lyrics flags and track pages from the tracklist", () => {
+    const tracks = toTracks(details(1, 3, [11]));
+    expect(tracks.map((t) => t.hasLyrics)).toEqual([false, true, false]);
+    expect(tracks[1]!.url).toBe("https://band1.bandcamp.com/track/t11");
   });
 
   it("keeps only streamable tracks", () => {
