@@ -77,6 +77,10 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 ## Release notes
 
+### 1.0.0
+
+<!-- Each feature merged into release/1.0.0 adds its line here. -->
+
 ### 0.3.0
 
 The release year is shown next to the artist and in the list.
