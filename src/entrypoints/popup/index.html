@@ -37,7 +37,7 @@
       <a id="artLink" target="_blank"><img class="art" id="art" alt=""></a>
       <div class="now-meta">
         <h2 class="trackTitle" id="relTitle"></h2>
-        <h3>by <a id="relArtist" target="_blank"></a><span class="year" id="relYear"></span></h3>
+        <h3>by <a id="relArtist" target="_blank"></a><span class="year" id="relYear"></span><label class="toggle repeat" id="repeatToggle" title="repeat this release (beta)"><input type="checkbox" id="repeat"><span class="icon repeat-icon"></span></label></h3>
         <button class="wishlist-link" id="relWish"><span class="wish-icon"></span><span class="label">Wishlist</span></button>
       </div>
     </div>
@@ -67,10 +67,12 @@
       <button class="tab" data-mode="track" role="tab">one track per release</button>
       <button class="tab" data-mode="album" role="tab">full releases</button>
     </div>
-    <label class="shuffle" title="shuffle releases">
-      <input type="checkbox" id="shuffle">
-      <span class="shuffle-icon"></span>shuffle
-    </label>
+    <div class="toggles">
+      <label class="toggle shuffle" title="shuffle releases">
+        <input type="checkbox" id="shuffle">
+        <span class="icon shuffle-icon"></span>shuffle
+      </label>
+    </div>
   </nav>
 
   <div class="status" id="status" hidden></div>

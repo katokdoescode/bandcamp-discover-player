@@ -287,7 +287,9 @@ a.bc-button { display: inline-flex; align-items: center; text-decoration: none; 
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--text); font-weight: 700; border-bottom-color: var(--text); }
 
-.shuffle {
+.toggles { display: flex; align-items: center; gap: 12px; }
+
+.toggle {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -295,16 +297,25 @@ a.bc-button { display: inline-flex; align-items: center; text-decoration: none; 
   cursor: pointer;
   user-select: none;
 }
-.shuffle input { display: none; }
-.shuffle-icon {
-  width: 14px;
-  height: 12px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12' fill='none' stroke='%23999' stroke-width='1.4'%3E%3Cpath d='M0 2.5h3c3 0 4 7 7 7h3M0 9.5h3c3 0 4-7 7-7h3M11 .5l2 2-2 2M11 7.5l2 2-2 2'/%3E%3C/svg%3E") no-repeat center;
+.toggle input { display: none; }
+.toggle .icon { width: 14px; height: 12px; background-repeat: no-repeat; background-position: center; }
+.toggle:has(input:checked) { color: var(--link); font-weight: 700; }
+/* small icon button at the end of the "by Artist · year" line */
+.toggle.repeat {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-left: 8px;
+  padding: 2px 5px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
 }
-.shuffle:has(input:checked) { color: var(--link); font-weight: 700; }
-.shuffle:has(input:checked) .shuffle-icon {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12' fill='none' stroke='%230687f5' stroke-width='1.6'%3E%3Cpath d='M0 2.5h3c3 0 4 7 7 7h3M0 9.5h3c3 0 4-7 7-7h3M11 .5l2 2-2 2M11 7.5l2 2-2 2'/%3E%3C/svg%3E");
-}
+.toggle.repeat:hover { border-color: var(--muted); }
+.toggle.repeat:has(input:checked) { border-color: var(--link); }
+
+.shuffle-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12' fill='none' stroke='%23999' stroke-width='1.4'%3E%3Cpath d='M0 2.5h3c3 0 4 7 7 7h3M0 9.5h3c3 0 4-7 7-7h3M11 .5l2 2-2 2M11 7.5l2 2-2 2'/%3E%3C/svg%3E"); }
+.shuffle:has(input:checked) .shuffle-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12' fill='none' stroke='%230687f5' stroke-width='1.6'%3E%3Cpath d='M0 2.5h3c3 0 4 7 7 7h3M0 9.5h3c3 0 4-7 7-7h3M11 .5l2 2-2 2M11 7.5l2 2-2 2'/%3E%3C/svg%3E"); }
+.repeat-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12' fill='none' stroke='%23999' stroke-width='1.4'%3E%3Cpath d='M1 6V4.5C1 3.4 1.9 2.5 3 2.5h9M10 .5l2 2-2 2M13 6v1.5c0 1.1-.9 2-2 2H2M4 7.5l-2 2 2 2'/%3E%3C/svg%3E"); }
+.repeat:has(input:checked) .repeat-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12' fill='none' stroke='%230687f5' stroke-width='1.6'%3E%3Cpath d='M1 6V4.5C1 3.4 1.9 2.5 3 2.5h9M10 .5l2 2-2 2M13 6v1.5c0 1.1-.9 2-2 2H2M4 7.5l-2 2 2 2'/%3E%3C/svg%3E"); }
 
 .status { margin: 8px 14px 0; color: var(--muted-dark); }
 .status.error { color: #c33; }

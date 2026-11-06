@@ -7,7 +7,7 @@ import { applyDiscoverResponse } from "../captures";
 import { COMMANDS, attachMediaSession, fetchJson, htmlAudioPort, servePopupPorts } from "../host";
 import { listen, notify, requestTab } from "../messaging";
 import { Player } from "../player";
-import type { Capture, Settings } from "../types";
+import { SETTINGS_KEYS, type Capture, type Settings } from "../types";
 
 interface StreamFilter {
   ondata: ((e: { data: ArrayBuffer }) => void) | null;
@@ -27,7 +27,7 @@ export function startFirefoxHost(): void {
     fetchJson,
     getCapture: async (tabId) => captures.get(tabId),
     settings: {
-      load: () => browser.storage.local.get(["mode", "shuffle"]) as Promise<Partial<Settings>>,
+      load: () => browser.storage.local.get([...SETTINGS_KEYS]) as Promise<Partial<Settings>>,
       save: (s) => browser.storage.local.set(s),
     },
   });
