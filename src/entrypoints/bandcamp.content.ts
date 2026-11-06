@@ -2,7 +2,7 @@ import { browser } from "wxt/browser";
 import { defineContentScript } from "wxt/utils/define-content-script";
 import { isHookMessage } from "@/lib/hook";
 import { listen } from "@/lib/messaging";
-import { apiFetch, readCrumbs, readDiscoverSpec, readFanId, setWishlisted, type PageFetch } from "@/lib/page";
+import { apiFetch, readArtistSpec, readCrumbs, readDiscoverSpec, readFanId, setWishlisted, type PageFetch } from "@/lib/page";
 import type { ContentMessage } from "@/lib/types";
 
 // Firefox globals for acting as the page (see MDN "Sharing objects with page scripts").
@@ -10,7 +10,8 @@ declare const content: { fetch: typeof fetch } | undefined;
 declare function cloneInto<T>(obj: T, target: Window): T;
 
 export default defineContentScript({
-  matches: ["*://bandcamp.com/*"],
+  // bandcamp.com for discover pages; artists' and labels' own <name>.bandcamp.com pages for "play all releases".
+  matches: ["*://bandcamp.com/*", "*://*.bandcamp.com/*"],
   // Early, so no discover_web response from the page hook is missed.
   runAt: "document_start",
   main() {
@@ -27,6 +28,8 @@ export default defineContentScript({
       switch (msg.type) {
         case "getDiscoverSpec":
           return Promise.resolve(readDiscoverSpec(document, location.href));
+        case "getArtistSpec":
+          return Promise.resolve(readArtistSpec(document, location.href));
         case "getFanId":
           return Promise.resolve(readFanId(document));
         case "apiFetch":

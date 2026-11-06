@@ -2,7 +2,7 @@
 // data, and make requests as the page itself (same origin, the fan's cookies).
 
 import { parseDiscoverSpec, type DiscoverInitialState } from "./discover-spec";
-import type { DiscoverSpec } from "./types";
+import type { ArtistSpec, DiscoverSpec } from "./types";
 
 function readBlob(doc: Document, id: string): any {
   const el = doc.getElementById(id);
@@ -18,6 +18,28 @@ function readBlob(doc: Document, id: string): any {
 export function readDiscoverSpec(doc: Document, href: string): DiscoverSpec | null {
   const blob = readBlob(doc, "DiscoverApp");
   return parseDiscoverSpec(href, (blob?.appData?.initialState as DiscoverInitialState) ?? null);
+}
+
+/**
+ * An artist's or label's page on <name>.bandcamp.com (home, /music, an album or a track):
+ * every one of them carries the band in a data-band attribute.
+ */
+export function readArtistSpec(doc: Document, href: string): ArtistSpec | null {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return null;
+  }
+  if (!url.hostname.endsWith(".bandcamp.com")) return null;
+  try {
+    const band = JSON.parse(doc.querySelector("[data-band]")?.getAttribute("data-band") || "null");
+    const id = Number(band?.id);
+    if (!id || typeof band.name !== "string") return null;
+    return { kind: "artist", pageUrl: `${url.origin}/music`, label: band.name, bandId: id };
+  } catch {
+    return null;
+  }
 }
 
 /** Logged-in fan id: new Vue pages keep it in pageContext, older pages in #pagedata. */

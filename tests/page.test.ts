@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { HOOK_SOURCE, installDiscoverHook } from "@/lib/hook";
-import { readCrumbs, readDiscoverSpec, readFanId, setWishlisted } from "@/lib/page";
+import { readArtistSpec, readCrumbs, readDiscoverSpec, readFanId, setWishlisted } from "@/lib/page";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -104,5 +104,32 @@ describe("setWishlisted", () => {
   it("reports server errors", async () => {
     const fetch = vi.fn(async () => json({ error: true, error_message: "not logged in" }));
     await expect(setWishlisted(fetch, "https://bandcamp.com", {}, req)).rejects.toThrow("not logged in");
+  });
+});
+
+describe("artist pages", () => {
+  function page(band: unknown) {
+    const doc = document.implementation.createHTMLDocument("x");
+    const el = doc.createElement("div");
+    el.setAttribute("data-band", JSON.stringify(band));
+    doc.body.append(el);
+    return doc;
+  }
+
+  it("reads the band from any of the artist's pages, with one page url for all of them", () => {
+    const doc = page({ id: 1127011076, name: "Twisted Teens", subdomain: "twistedteens" });
+    for (const href of ["https://twistedteens.bandcamp.com/", "https://twistedteens.bandcamp.com/album/florida-water-blues"]) {
+      expect(readArtistSpec(doc, href)).toEqual({
+        kind: "artist",
+        pageUrl: "https://twistedteens.bandcamp.com/music",
+        label: "Twisted Teens",
+        bandId: 1127011076,
+      });
+    }
+  });
+
+  it("ignores bandcamp.com itself and pages without a band", () => {
+    expect(readArtistSpec(page({ id: 1, name: "x" }), "https://bandcamp.com/discover/punk")).toBeNull();
+    expect(readArtistSpec(document.implementation.createHTMLDocument("x"), "https://daily.bandcamp.com/")).toBeNull();
   });
 });

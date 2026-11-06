@@ -1,7 +1,7 @@
 // Bandcamp endpoints and conversions from their JSON to our own shapes.
 // These are Bandcamp's internal APIs (the ones its own pages use), not a public API.
 
-import type { DiscoverResult, Item, Track } from "./types";
+import type { ArtistOrder, DiscoverResult, Item, Track } from "./types";
 
 export const API = "https://bandcamp.com/api";
 export const DISCOVER_PATH = "/api/discover/1/discover_web";
@@ -68,12 +68,71 @@ export function toItem(r: DiscoverResult): Item {
   };
 }
 
+export const BAND_DETAILS_URL = `${API}/mobile/25/band_details`;
+
+export interface BandDetails {
+  discography?: {
+    item_id: number;
+    item_type: "album" | "track" | string;
+    title: string;
+    artist_name?: string | null;
+    band_name: string;
+    band_id: number;
+    art_id?: number | null;
+    /** "30 Oct 2026 00:00:00 GMT" */
+    release_date?: string | null;
+  }[];
+}
+
+/**
+ * An artist's (or label's) releases from band_details. It lacks links, track
+ * counts and featured tracks; those come with each release's tracklist.
+ */
+export function toArtistItems(data: BandDetails, bandUrl: string): Item[] {
+  return (data.discography || []).map((d) => {
+    const released = d.release_date ? Date.parse(d.release_date) : NaN;
+    return {
+      id: d.item_id,
+      type: d.item_type === "track" ? "t" : "a",
+      title: d.title,
+      artist: d.artist_name || d.band_name,
+      bandId: d.band_id,
+      url: bandUrl,
+      artId: d.art_id || null,
+      trackCount: 0,
+      wishlisted: false,
+      owned: false,
+      year: releaseYear(d.release_date),
+      released: Number.isFinite(released) ? released : null,
+      featured: null,
+      tracks: null,
+    };
+  });
+}
+
+/** Item indices sorted by release date; undated releases go last. */
+export function byReleaseDate(items: Item[], order: ArtistOrder): number[] {
+  const dir = order === "oldest" ? 1 : -1;
+  return items
+    .map((it, i) => ({ i, t: it.released ?? null }))
+    .sort((a, b) => {
+      if (a.t === b.t) return a.i - b.i;
+      if (a.t === null) return 1;
+      if (b.t === null) return -1;
+      return (a.t - b.t) * dir || a.i - b.i;
+    })
+    .map((x) => x.i);
+}
+
 export function tralbumDetailsUrl(item: Pick<Item, "bandId" | "id" | "type">): string {
   return `${API}/mobile/25/tralbum_details?band_id=${item.bandId}&tralbum_id=${item.id}&tralbum_type=${item.type}`;
 }
 
 export interface TralbumDetails {
   tralbum_artist?: string;
+  /** The release's page. */
+  bandcamp_url?: string;
+  featured_track_id?: number;
   /** Unix seconds. */
   release_date?: number;
   tracks?: {

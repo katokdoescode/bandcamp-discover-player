@@ -14,10 +14,24 @@ export interface DiscoverParams {
 
 /** What the content script reports about a discover page. */
 export interface DiscoverSpec {
+  kind?: "discover";
   pageUrl: string;
   label: string;
   params: DiscoverParams;
 }
+
+/** What the content script reports about an artist's or label's page on <name>.bandcamp.com. */
+export interface ArtistSpec {
+  kind: "artist";
+  /** The artist's /music page, the same for all of its pages. */
+  pageUrl: string;
+  label: string;
+  bandId: number;
+}
+
+export type PageSpec = DiscoverSpec | ArtistSpec;
+
+export type ArtistOrder = "newest" | "oldest";
 
 /** One release as returned by discover_web. */
 export interface DiscoverResult {
@@ -83,6 +97,8 @@ export interface Item {
   owned: boolean;
   /** Release year; missing in snapshots saved before 0.3.0. */
   year?: number | null;
+  /** Release date (ms since epoch), for sorting an artist's releases. */
+  released?: number | null;
   featured: Track | null;
   tracks: Track[] | null;
 }
@@ -90,18 +106,21 @@ export interface Item {
 export type Mode = "track" | "album";
 
 /** Keys of Settings, as read from extension storage. */
-export const SETTINGS_KEYS = ["mode", "shuffle", "repeat"] as const;
+export const SETTINGS_KEYS = ["mode", "shuffle", "repeat", "artistOrder"] as const;
 
 export interface Settings {
   mode: Mode;
   shuffle: boolean;
   /** Loop the current release (full releases mode only). */
   repeat: boolean;
+  /** Order of an artist's releases. */
+  artistOrder: ArtistOrder;
 }
 
 /** Messages the extension sends to the bandcamp.com content script. */
 export type ContentMessage =
   | { type: "getDiscoverSpec" }
+  | { type: "getArtistSpec" }
   | { type: "getFanId" }
   | { type: "apiFetch"; url: string; method: string; body?: unknown }
   | {
@@ -115,11 +134,12 @@ export type ContentMessage =
 
 /** State the popup renders. */
 export interface PublicState {
-  source: { label: string; pageUrl: string; sig: string | null } | null;
+  source: { kind: "discover" | "artist"; label: string; pageUrl: string; sig: string | null } | null;
   notice: "login" | null;
   mode: Mode;
   shuffle: boolean;
   repeat: boolean;
+  artistOrder: ArtistOrder;
   loading: boolean;
   error: string | null;
   hasMore: boolean;
@@ -167,6 +187,7 @@ export type PlayerCommand =
   | { cmd: "playTrack"; itemIndex: number; trackId?: number }
   | { cmd: "setShuffle"; on: boolean }
   | { cmd: "setRepeat"; on: boolean }
+  | { cmd: "setArtistOrder"; order: ArtistOrder }
   | { cmd: "setMode"; mode: Mode }
   | { cmd: "toggleWishlist"; itemIndex: number; trackId?: number }
   | { cmd: "dismissNotice" }
