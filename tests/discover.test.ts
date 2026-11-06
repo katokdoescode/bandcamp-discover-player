@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { artUrl, isPageDiscoverRequest, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
+import { artUrl, isPageDiscoverRequest, normalizeResults, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
 import { applyDiscoverResponse } from "@/lib/captures";
 import { parseDiscoverSpec } from "@/lib/discover-spec";
 import { formatTime, range, shuffled } from "@/lib/util";
@@ -114,6 +114,34 @@ describe("bandcamp helpers", () => {
   it("takes the year from discover results", () => {
     expect(toItem(result(1, { release_date: "2019-05-03 00:00:00 UTC" })).year).toBe(2019);
     expect(toItem(result(1)).year).toBeNull();
+  });
+
+  it("reads the camelCase results Bandcamp sends since November 2026", () => {
+    const camel = {
+      itemId: 7,
+      itemType: "a",
+      title: "Computer Metal",
+      itemUrl: "https://mbr.bandcamp.com/album/computer-metal?from=discover_page",
+      albumArtist: null,
+      bandName: "MASTER BOOT RECORD",
+      bandId: 99,
+      primaryImage: { imageId: 2829643149, isArt: true },
+      trackCount: 10,
+      isWishlisted: null,
+      isOwned: null,
+      featuredTrack: { id: 70, title: "Command Prompt", bandName: "MASTER BOOT RECORD", streamUrl: "https://stream/70", duration: 333 },
+    };
+    const [r] = normalizeResults([camel]);
+    expect(toItem(r!)).toMatchObject({
+      id: 7,
+      artist: "MASTER BOOT RECORD",
+      url: "https://mbr.bandcamp.com/album/computer-metal",
+      artId: 2829643149,
+      trackCount: 10,
+      featured: { id: 70, stream: "https://stream/70", duration: 333 },
+    });
+    expect(normalizeResults([result(1)])[0]).toEqual(result(1));
+    expect(normalizeResults(undefined)).toEqual([]);
   });
 
   it("keeps only streamable tracks", () => {

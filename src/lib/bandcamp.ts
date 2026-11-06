@@ -30,6 +30,22 @@ export function releaseYear(date: string | number | null | undefined): number | 
   return m ? Number(m[1]) : null;
 }
 
+const snakeKey = (k: string) => k.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
+
+function snakeKeys(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(snakeKeys);
+  if (!v || typeof v !== "object") return v;
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [snakeKey(k), snakeKeys(x)]));
+}
+
+/**
+ * discover_web results with snake_case keys. Bandcamp switched the response to
+ * camelCase (itemId, featuredTrack.streamUrl, …) in November 2026; both are accepted.
+ */
+export function normalizeResults(results: unknown): DiscoverResult[] {
+  return Array.isArray(results) ? (results.map(snakeKeys) as DiscoverResult[]) : [];
+}
+
 export function toItem(r: DiscoverResult): Item {
   const ft = r.featured_track;
   return {

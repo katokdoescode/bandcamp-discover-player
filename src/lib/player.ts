@@ -3,7 +3,7 @@
 // storage) comes in through PlayerEnv, so the same code runs in Firefox's
 // background page, in Chrome's offscreen document and in unit tests.
 
-import { DISCOVER_URL, OWN_MARK, PAGE_SIZE, artUrl, releaseYear, toItem, toTracks, tralbumDetailsUrl } from "./bandcamp";
+import { DISCOVER_URL, OWN_MARK, PAGE_SIZE, artUrl, normalizeResults, releaseYear, toItem, toTracks, tralbumDetailsUrl } from "./bandcamp";
 import type { TralbumDetails } from "./bandcamp";
 import type {
   Capture,
@@ -214,7 +214,7 @@ export class Player {
         size: PAGE_SIZE,
       });
       const known = new Set(this.items.map((i) => i.id));
-      const fresh = (data.results || []).map(toItem).filter((i) => !known.has(i.id));
+      const fresh = normalizeResults(data.results).map(toItem).filter((i) => !known.has(i.id));
       const start = this.items.length;
       this.items.push(...fresh);
       const added = range(start, this.items.length);

@@ -81,6 +81,10 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 The release year is shown next to the artist and in the list.
 
+### 0.2.3
+
+Fixes the player after Bandcamp changed its discover data: artists, cover art, track counts and whole releases work again.
+
 ### 0.2.2
 
 The popup header no longer scrolls out of view when the queue jumps to the current release.
