@@ -145,7 +145,7 @@ export interface Setup {
   /** Direct API answers; undefined means "bot challenge", i.e. use the tab proxy. */
   api?: (url: string, body?: any) => unknown;
   /** Answers through the tab proxy (apiFetch). */
-  proxy?: (url: string, body?: any) => unknown;
+  proxy?: (url: string, body?: any, tabId?: number) => unknown;
   /** Release ids whose tralbum_details have no streamable tracks. */
   silent?: number[];
   /** Settings saved by an earlier session. */
@@ -199,7 +199,7 @@ export async function setup(o: Setup = {}) {
         case "setWishlisted":
           return true as any;
         case "apiFetch":
-          return (o.proxy ?? api)(msg.url, msg.body) as any;
+          return (o.proxy ?? api)(msg.url, msg.body, tabId) as any;
       }
     },
     async fetchJson(url, body) {

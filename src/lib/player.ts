@@ -254,15 +254,24 @@ export class Player {
   private async api<T>(url: string, body?: unknown): Promise<T> {
     const direct = await this.env.fetchJson(url, body).catch(() => undefined);
     if (direct !== undefined) return direct as T;
-    const tab = await this.findBandcampTab();
-    if (!tab) throw new Error("Bandcamp is not reachable. Open any bandcamp.com page and try again.");
-    return this.env.sendToTab<T>(tab.id, { type: "apiFetch", url, method: body ? "POST" : "GET", body });
+    const tabs = await this.bandcampComTabs();
+    if (!tabs.length) throw new Error("Bandcamp is not reachable. Open any bandcamp.com page and try again.");
+    // A tab that hasn't passed Bandcamp's bot check gets a page instead of JSON: try the others.
+    let error: unknown;
+    for (const tab of tabs) {
+      try {
+        return await this.env.sendToTab<T>(tab.id, { type: "apiFetch", url, method: body ? "POST" : "GET", body });
+      } catch (e) {
+        error = e;
+      }
+    }
+    throw error;
   }
 
-  /** A bandcamp.com tab: API requests go to bandcamp.com, so an artist's subdomain won't do. */
-  private async findBandcampTab() {
+  /** bandcamp.com tabs, the active one first: API requests go to bandcamp.com, so an artist's subdomain won't do. */
+  private async bandcampComTabs() {
     const tabs = (await this.env.bandcampTabs()).filter((t) => !t.artistPage);
-    return tabs.find((t) => t.active) || tabs[0] || null;
+    return [...tabs.filter((t) => t.active), ...tabs.filter((t) => !t.active)];
   }
 
   private async loadTracks(item: Item, force = false): Promise<Track[]> {

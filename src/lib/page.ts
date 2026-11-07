@@ -56,9 +56,18 @@ export async function apiFetch(pageFetch: PageFetch, url: string, method: string
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
+  if (!res.ok) throw new Error(res.status === 429 ? BUSY : "HTTP " + res.status);
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    // An HTML page instead of JSON: Bandcamp's bot check ("Client Challenge").
+    throw new Error(BOT_CHECK);
+  }
 }
+
+export const BOT_CHECK = "Bandcamp is checking that you're not a bot. Reload a bandcamp.com tab, wait until the page shows, then try again.";
+const BUSY = "Bandcamp says there are too many requests. Wait a minute and try again.";
 
 export interface WishlistRequest {
   add: boolean;
