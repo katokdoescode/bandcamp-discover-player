@@ -52,7 +52,7 @@ To build it yourself instead, see [Development](#development).
 - After the page is reloaded (`s=rand` gives new results every time) or its filters
   change, the player offers **update list**; the current track keeps playing.
 - ♡ wishlist for releases and single tracks (red when wishlisted, click again to remove).
-  Needs an open bandcamp.com tab where you are logged in; otherwise it offers to log in.
+  Needs an open Bandcamp tab where you are logged in (bandcamp.com or an artist's page); otherwise it offers to log in.
 - Music keeps playing after the popup closes. Media keys work; in the popup, `Space` and `Shift+←/→`.
 
 ## Development

@@ -494,6 +494,27 @@ describe("wishlist", () => {
     ]);
   });
 
+  it("wishlists from an artist's page when no bandcamp.com tab is open", async () => {
+    const { player, view, wishTabs } = await setup({ capture: capture([1]), fanId: 42, tabs: [{ id: 9, active: true, artistPage: true }] });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "toggleWishlist", itemIndex: 0 });
+
+    expect(view().notice).toBeNull();
+    expect(view().queue[0]!.wishlisted).toBe(true);
+    expect(wishTabs).toEqual([9]);
+  });
+
+  it("prefers a bandcamp.com tab for the wishlist", async () => {
+    const tabs = [
+      { id: 9, active: true, artistPage: true },
+      { id: 7, active: false },
+    ];
+    const { player, wishTabs } = await setup({ capture: capture([1]), fanId: 42, tabs });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "toggleWishlist", itemIndex: 0 });
+    expect(wishTabs).toEqual([7]);
+  });
+
   it("wishlists single tracks as tracks", async () => {
     const { player, view, sent } = await setup({ capture: capture([1]), fanId: 42 });
     await player.handle({ cmd: "loadFromTab", tabId: TAB });

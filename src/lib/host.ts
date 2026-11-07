@@ -2,7 +2,7 @@
 // direct JSON fetches and the OS media controls.
 
 import { browser } from "wxt/browser";
-import type { AudioEvent, AudioPort, Player } from "./player";
+import type { AudioEvent, AudioPort, BandcampTab, Player } from "./player";
 import type { PlayerCommand } from "./types";
 import { errorMessage } from "./util";
 
@@ -38,6 +38,22 @@ export function htmlAudioPort(el: HTMLAudioElement): AudioPort {
 }
 
 /** Bandcamp API call from an extension page; undefined when the answer isn't JSON (bot challenge). */
+/**
+ * Open Bandcamp tabs: bandcamp.com and artists' own <name>.bandcamp.com pages.
+ * API requests need a bandcamp.com tab; the wishlist works from either.
+ */
+export async function bandcampTabs(): Promise<BandcampTab[]> {
+  const tabs = await browser.tabs.query({ url: "*://*.bandcamp.com/*" });
+  return tabs.flatMap((t) => {
+    if (t.id == null) return [];
+    let artistPage = true;
+    try {
+      artistPage = new URL(t.url || "").hostname !== "bandcamp.com";
+    } catch {}
+    return [{ id: t.id, active: t.active, artistPage }];
+  });
+}
+
 export async function fetchJson(url: string, body?: unknown): Promise<unknown> {
   const res = await fetch(url, {
     method: body ? "POST" : "GET",

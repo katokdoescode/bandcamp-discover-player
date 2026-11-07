@@ -86,6 +86,8 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 Single-track releases in an artist's discography show "1 track" and a proper track number instead of "0 tracks" and "null". Releases whose tracklist hasn't loaded yet no longer say "0 tracks".
 
+The wishlist heart works when only an artist's page is open; before, it asked you to log in.
+
 ### 1.0.1
 
 The player fits phone screens in Firefox for Android, and you can seek by dragging with a finger.

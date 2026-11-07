@@ -4,7 +4,7 @@
 import { browser } from "wxt/browser";
 import { DISCOVER_URL, OWN_MARK } from "../bandcamp";
 import { applyDiscoverResponse } from "../captures";
-import { COMMANDS, attachMediaSession, fetchJson, fetchText, htmlAudioPort, servePopupPorts } from "../host";
+import { COMMANDS, attachMediaSession, bandcampTabs, fetchJson, fetchText, htmlAudioPort, servePopupPorts } from "../host";
 import { listen, notify, requestTab } from "../messaging";
 import { Player } from "../player";
 import { SETTINGS_KEYS, type Capture, type Settings } from "../types";
@@ -21,8 +21,7 @@ export function startFirefoxHost(): void {
 
   const player = new Player({
     audio: htmlAudioPort(new Audio()),
-    bandcampTabs: async () =>
-      (await browser.tabs.query({ url: "*://bandcamp.com/*" })).flatMap((t) => (t.id != null ? [{ id: t.id, active: t.active }] : [])),
+    bandcampTabs,
     sendToTab: requestTab,
     fetchJson,
     fetchText,

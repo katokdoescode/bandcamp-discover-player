@@ -56,10 +56,17 @@ export interface AudioPort {
   on(event: AudioEvent, fn: () => void): void;
 }
 
+export interface BandcampTab {
+  id: number;
+  active?: boolean;
+  /** An artist's or label's <name>.bandcamp.com page rather than bandcamp.com. */
+  artistPage?: boolean;
+}
+
 export interface PlayerEnv {
   audio: AudioPort;
-  /** Open bandcamp.com tabs. */
-  bandcampTabs(): Promise<{ id: number; active?: boolean }[]>;
+  /** Open bandcamp.com and <name>.bandcamp.com tabs. */
+  bandcampTabs(): Promise<BandcampTab[]>;
   /** Sends a message to the content script of a tab and returns its answer. */
   sendToTab<T>(tabId: number, msg: ContentMessage): Promise<T>;
   /** Fetches JSON directly; resolves to undefined when the answer is not JSON (bot challenge, network). */
@@ -237,8 +244,9 @@ export class Player {
     return this.env.sendToTab<T>(tab.id, { type: "apiFetch", url, method: body ? "POST" : "GET", body });
   }
 
+  /** A bandcamp.com tab: API requests go to bandcamp.com, so an artist's subdomain won't do. */
   private async findBandcampTab() {
-    const tabs = await this.env.bandcampTabs();
+    const tabs = (await this.env.bandcampTabs()).filter((t) => !t.artistPage);
     return tabs.find((t) => t.active) || tabs[0] || null;
   }
 
@@ -655,9 +663,10 @@ export class Player {
     this.broadcast();
   }
 
-  /** The first open bandcamp.com tab with a logged-in fan. */
+  /** The first open Bandcamp tab with a logged-in fan; an artist's page works too. */
   private async findFanTab(): Promise<{ tabId: number; fanId: number } | null> {
-    for (const tab of await this.env.bandcampTabs()) {
+    const tabs = await this.env.bandcampTabs();
+    for (const tab of [...tabs.filter((t) => !t.artistPage), ...tabs.filter((t) => t.artistPage)]) {
       const fanId = await this.env.sendToTab<number | null>(tab.id, { type: "getFanId" }).catch(() => null);
       if (fanId) return { tabId: tab.id, fanId };
     }

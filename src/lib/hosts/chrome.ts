@@ -6,9 +6,9 @@
 
 import { browser } from "wxt/browser";
 import { applyDiscoverResponse } from "../captures";
-import { COMMANDS } from "../host";
+import { COMMANDS, bandcampTabs } from "../host";
 import { listen, notify, request, requestTab } from "../messaging";
-import type { Snapshot } from "../player";
+import type { BandcampTab, Snapshot } from "../player";
 import { SETTINGS_KEYS, type Capture, type ContentMessage, type Settings } from "../types";
 
 const OFFSCREEN_PATH = "/offscreen.html";
@@ -17,7 +17,7 @@ const SNAPSHOT_KEY = "snapshot";
 
 /** Operations the offscreen player asks the service worker to do. */
 export interface BridgeOps {
-  bandcampTabs: () => { id: number; active?: boolean }[];
+  bandcampTabs: () => BandcampTab[];
   sendToTab: (tabId: number, msg: ContentMessage) => unknown;
   getCapture: (tabId: number) => Capture | undefined;
   loadSettings: () => Partial<Settings>;
@@ -54,10 +54,7 @@ export async function ensureOffscreen(): Promise<void> {
 
 export function startChromeServiceWorker(): void {
   const ops: { [K in keyof BridgeOps]: (...args: Parameters<BridgeOps[K]>) => Promise<unknown> } = {
-    async bandcampTabs() {
-      const tabs = await browser.tabs.query({ url: "*://bandcamp.com/*" });
-      return tabs.flatMap((t) => (t.id != null ? [{ id: t.id, active: t.active }] : []));
-    },
+    bandcampTabs,
     sendToTab: (tabId, msg) => requestTab(tabId, msg),
     async getCapture(tabId) {
       const key = captureKey(tabId);
