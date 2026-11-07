@@ -224,7 +224,7 @@ a.bc-button { display: inline-flex; align-items: center; text-decoration: none; 
 
 .progress_row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 
-.progbar { position: relative; flex: 1; height: 12px; cursor: pointer; }
+.progbar { position: relative; flex: 1; height: 12px; cursor: pointer; touch-action: none; }
 
 .progbar_empty {
   position: absolute;
@@ -482,3 +482,16 @@ a.bc-button { display: inline-flex; align-items: center; text-decoration: none; 
 .link { color: var(--link); }
 .link:hover { text-decoration: underline; }
 .link:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+
+/* ---------- phones: Firefox for Android opens the popup as a full-screen page ---------- */
+
+@media (hover: none) and (pointer: coarse) {
+  html, body { width: auto; height: 100%; }
+  /* the list (or lyrics, or recommendations) takes the height left under the player */
+  body { display: flex; flex-direction: column; }
+  body > * { flex-shrink: 0; }
+  .track_list, .lyrics, .recs { flex: 1 1 0; min-height: 120px; max-height: none; }
+  .recs { display: flex; flex-direction: column; }
+  .recs-list { flex: 1 1 0; min-height: 0; }
+  .queue-foot { margin-top: auto; }
+}

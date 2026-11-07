@@ -478,19 +478,23 @@ function fractionAt(ev: MouseEvent): number {
   return (ev.clientX - rect.left - half) / (rect.width - half * 2);
 }
 
-$("progbar").addEventListener("mousedown", (ev) => {
-  if (!state?.current) return;
+// Pointer events, so seeking works with a finger too (Firefox for Android).
+$("progbar").addEventListener("pointerdown", (ev) => {
+  if (!state?.current || ev.button !== 0) return;
+  ev.preventDefault();
   dragging = true;
   setProgress(fractionAt(ev));
-  const move = (e: MouseEvent) => setProgress(fractionAt(e));
-  const up = (e: MouseEvent) => {
+  const move = (e: PointerEvent) => setProgress(fractionAt(e));
+  const up = (e: PointerEvent) => {
     dragging = false;
-    window.removeEventListener("mousemove", move);
-    window.removeEventListener("mouseup", up);
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    window.removeEventListener("pointercancel", up);
     void send({ cmd: "seek", fraction: Math.max(0, Math.min(1, fractionAt(e))) });
   };
-  window.addEventListener("mousemove", move);
-  window.addEventListener("mouseup", up);
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+  window.addEventListener("pointercancel", up);
 });
 
 document.addEventListener("keydown", (e) => {
