@@ -26,7 +26,9 @@
     "test:watch": "vitest",
     "lint:firefox": "web-ext lint --source-dir .output/firefox-mv2",
     "check": "npm run typecheck && npm test && npm run build && npm run build:firefox && npm run lint:firefox",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "monitor": "node scripts/monitor.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -34,6 +36,7 @@
   "devDependencies": {
     "@wxt-dev/auto-icons": "1.1.2",
     "happy-dom": "21.0.4",
+    "playwright": "1.64.1",
     "typescript": "7.0.2",
     "vitest": "5.0.5",
     "web-ext": "10.8.0",
