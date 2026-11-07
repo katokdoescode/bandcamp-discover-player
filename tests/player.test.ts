@@ -46,6 +46,23 @@ describe("loading a discover page", () => {
     expect(view().queue).toHaveLength(1);
   });
 
+  it("tries the other bandcamp.com tabs when one gets the bot check too", async () => {
+    const { player, view } = await setup({
+      tabs: [
+        { id: 5, active: true },
+        { id: 6, active: false, artistPage: true },
+        { id: 7, active: false },
+      ],
+      api: () => undefined,
+      proxy: (url, _body, tabId) => {
+        if (tabId !== 7) throw new Error("Bandcamp is checking that you're not a bot.");
+        return url.includes("discover_web") ? { results: [result(4)], cursor: null } : undefined;
+      },
+    });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().queue).toHaveLength(1);
+  });
+
   it("shows the release year in the queue and for the current release", async () => {
     const c = capture([1, 2]);
     c.results[0]!.release_date = "2024-02-09 00:00:00 UTC";

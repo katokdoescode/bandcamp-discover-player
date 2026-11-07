@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { HOOK_SOURCE, installDiscoverHook } from "@/lib/hook";
-import { readArtistSpec, readCrumbs, readDiscoverSpec, readFanId, setWishlisted } from "@/lib/page";
+import { BOT_CHECK, apiFetch, readArtistSpec, readCrumbs, readDiscoverSpec, readFanId, setWishlisted } from "@/lib/page";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -136,5 +136,14 @@ describe("artist pages", () => {
   it("ignores bandcamp.com itself and pages without a band", () => {
     expect(readArtistSpec(page({ id: 1, name: "x" }), "https://bandcamp.com/discover/punk")).toBeNull();
     expect(readArtistSpec(document.implementation.createHTMLDocument("x"), "https://daily.bandcamp.com/")).toBeNull();
+  });
+});
+
+describe("apiFetch", () => {
+  it("explains Bandcamp's bot check instead of failing to parse it", async () => {
+    const page = async () => new Response("<html><title>Client Challenge</title></html>", { headers: { "content-type": "text/html" } });
+    await expect(apiFetch(page, "https://bandcamp.com/api/x", "GET")).rejects.toThrow(BOT_CHECK);
+    await expect(apiFetch(async () => json({ ok: 1 }), "https://bandcamp.com/api/x", "GET")).resolves.toEqual({ ok: 1 });
+    await expect(apiFetch(async () => new Response("", { status: 429 }), "https://bandcamp.com/api/x", "GET")).rejects.toThrow("too many requests");
   });
 });

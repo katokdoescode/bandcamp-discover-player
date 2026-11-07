@@ -83,6 +83,10 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 ## Release notes
 
+### 1.1.1
+
+When Bandcamp asks to confirm you're not a bot, the player says so and what to do, instead of a "JSON.parse" error, and tries your other bandcamp.com tabs first.
+
 ### 1.1.0
 
 Support the artists: the player shows what the release sells and for how much (album, track, physical editions, a track of an album sold on its own) with a link to buy it on Bandcamp. After you've played a track to the end as many times as the artist allows before asking to buy (usually 3), it suggests buying the release. Close the reminder and it won't show again for that release. Play counts stay in your browser.
