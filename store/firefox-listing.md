@@ -12,32 +12,33 @@ bandcamp-discover-player
 
 ## Summary (max 250 characters)
 
-Play everything on a Bandcamp discover page, in order or shuffled — one track per release or whole releases — from a compact player styled after Bandcamp's own. Wishlist hearts included.
+Play Bandcamp discover pages, artist discographies and recommendations from your toolbar: in order or shuffled, one track per release or whole releases.
 
 ## Description
 
-Discover Player turns any Bandcamp discover page (for example a genre like punk / hardcore punk, sorted by "surprise me") into a playlist.
+Turns a Bandcamp discover page into a playlist.
 
 How to use it:
 1. Open a genre on bandcamp.com/discover.
 2. Click the toolbar icon and press "play this page".
 
-Features:
-- Plays exactly the releases the page shows, including ones loaded with "View more results", and loads more by itself as you scroll or listen to the end.
-- Two modes: one track per release, or every release in full.
-- Shuffle the order of releases (tracks inside a release stay in order).
-- "You may also like": from the release you are listening to, play the releases Bandcamp recommends with it.
-- On an artist's or label's page, play all their releases, newest or oldest first.
-- Repeat (beta): loop the release you are listening to in full.
-- Read the lyrics of the playing track, when the artist has added them.
-- Shows the release year next to the artist and in the list.
-- Reloaded the page or changed filters? The player offers to update its list, and the current track keeps playing.
-- Add releases or single tracks to your Bandcamp wishlist with the heart button (you need to be logged in on bandcamp.com).
+What it does:
+- Plays the releases on the page and loads more as you scroll or listen.
+- One track per release or every release in full, in order or shuffled.
+- Repeats the current release (beta, full releases only).
+- Shows lyrics for tracks that have them.
+- On an artist's or label's page, plays their whole discography, newest or oldest first.
+- "You may also like" plays what Bandcamp recommends for the current release.
+- The heart adds a release or track to your wishlist (log in on bandcamp.com first).
 - Keeps playing when the popup is closed. Media keys work.
 
-This is an unofficial add-on and is not affiliated with Bandcamp. It talks only to Bandcamp, using your existing Bandcamp session, and collects no data.
+Unofficial, not affiliated with Bandcamp. Talks only to Bandcamp and collects no data.
 
 Source code: https://github.com/katokdoescode/bandcamp-discover-player
+
+## Translations
+
+The summary and description are also published in German, French, Spanish, Polish, Ukrainian, Russian, Serbian, Turkish and Georgian: see [firefox-listing-translations.md](firefox-listing-translations.md).
 
 ## Categories
 
