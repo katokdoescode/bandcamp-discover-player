@@ -1,3 +1,5 @@
+import type { Buy } from "./types";
+
 export function shuffled<T>(arr: readonly T[], random: () => number = Math.random): T[] {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -39,4 +41,26 @@ export function shouldAutoLoad(
 ): boolean {
   if (!s.hasMore || s.loading || s.error) return false;
   return list.scrollHeight - list.scrollTop - list.clientHeight <= AUTO_LOAD_MARGIN;
+}
+
+/** "$7", "€4.50"; the code itself when the currency is unknown to Intl. */
+export function formatPrice(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    }).format(amount);
+  } catch {
+    return `${amount} ${currency}`;
+  }
+}
+
+/** Text of the buy link: "Buy · $7", "Buy · $5 or more", "Buy · name your price", "Free download". */
+export function buyLabel(buy: Buy): string {
+  if (buy.free) return "Free download";
+  const verb = buy.preorder ? "Pre-order" : "Buy";
+  if (buy.nameYourPrice && !buy.price) return `${verb} · name your price`;
+  const price = formatPrice(buy.price, buy.currency);
+  return `${verb} · ${buy.nameYourPrice ? `${price} or more` : price}`;
 }

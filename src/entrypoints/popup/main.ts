@@ -1,7 +1,7 @@
 import { browser, type Browser } from "wxt/browser";
 import { request } from "@/lib/messaging";
 import type { LyricsResult, PageSpec, PlayerCommand, PlayerEvent, PublicState, RecsResult } from "@/lib/types";
-import { formatTime as fmt, shouldAutoLoad } from "@/lib/util";
+import { buyLabel, formatTime as fmt, shouldAutoLoad } from "@/lib/util";
 
 type TabSpec = PageSpec & { sig: string | null };
 type Reply = { type: "reply"; reqId: number; result?: unknown; error?: string };
@@ -149,6 +149,22 @@ function render(): void {
     setWishState(relWish, rel.wishlisted, rel.owned, "release");
     relWish.querySelector(".label")!.textContent = rel.owned ? "In your collection" : rel.wishlisted ? "In Wishlist" : "Wishlist";
     setWishState($<HTMLButtonElement>("trackWish"), cur.track.wishlisted, false, "track");
+
+    // Buying happens on Bandcamp: both links open the release page.
+    const buyLink = $<HTMLAnchorElement>("buyLink");
+    buyLink.hidden = !rel.buy;
+    if (rel.buy) {
+      buyLink.textContent = buyLabel(rel.buy);
+      buyLink.href = rel.url;
+    }
+    $("nudge").hidden = !rel.nudge || !rel.buy;
+    if (rel.nudge && rel.buy) {
+      $("nudgeText").textContent = rel.buy.free
+        ? `You've played this ${rel.nudge.plays} times. It's a free download from ${rel.artist}.`
+        : `You've played this ${rel.nudge.plays} times. Buy it to support ${rel.artist}.`;
+      $("nudgeBuy").textContent = rel.buy.free ? "download" : "buy";
+      $<HTMLAnchorElement>("nudgeBuy").href = rel.url;
+    }
     const lyricsBtn = $("lyricsBtn");
     lyricsBtn.hidden = !cur.track.hasLyrics;
     lyricsBtn.classList.toggle("on", !!lyricsView?.follow);
@@ -441,6 +457,7 @@ $("sortBtn").addEventListener("click", () => {
 });
 $("queue").addEventListener("scroll", maybeAutoLoad, { passive: true });
 $("noticeClose").addEventListener("click", () => void send({ cmd: "dismissNotice" }));
+$("nudgeClose").addEventListener("click", () => void send({ cmd: "dismissNudge" }));
 $("relWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex);
 });

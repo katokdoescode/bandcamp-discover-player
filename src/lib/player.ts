@@ -16,6 +16,7 @@ import {
   parseLyrics,
   releaseYear,
   toArtistItems,
+  toBuy,
   toItem,
   toTracks,
   tralbumDetailsUrl,
@@ -109,6 +110,11 @@ interface Current {
 /** "first" / "last" track of a release, or a specific track id. */
 type Pick = "first" | "last" | number;
 
+/** Bandcamp's usual streaming limit, for releases whose limit is unknown. */
+const DEFAULT_PLAY_LIMIT = 3;
+const MAX_PLAYS = 2000;
+const MAX_NUDGE_OFF = 500;
+
 export class Player {
   private source: Source | null = null;
   private items: Item[] = [];
@@ -126,6 +132,10 @@ export class Player {
   private notice: "login" | null = null;
   /** Bandcamp doesn't report wishlist state of single tracks, so we track our own changes. */
   private trackWish: Record<number, boolean> = {};
+  /** Full plays per track, for the buy reminder; oldest first. */
+  private plays: Record<string, number> = {};
+  /** Releases whose buy reminder was closed. */
+  private nudgeOff: string[] = [];
 
   /** Bumps on every play request, so stale async work can bail out. */
   private playGen = 0;
@@ -164,6 +174,8 @@ export class Player {
     if (typeof s.shuffle === "boolean") this.shuffle = s.shuffle;
     if (typeof s.repeat === "boolean") this.repeat = s.repeat;
     if (s.artistOrder === "newest" || s.artistOrder === "oldest") this.artistOrder = s.artistOrder;
+    if (s.plays && typeof s.plays === "object") this.plays = s.plays;
+    if (Array.isArray(s.nudgeOff)) this.nudgeOff = s.nudgeOff;
     if (snapshot) this.restore(snapshot);
   }
 
@@ -211,6 +223,8 @@ export class Player {
           this.notice = null;
           this.broadcast();
           return;
+        case "dismissNudge":
+          return this.dismissNudge();
         case "loadMore":
           return this.fetchNextPage();
         case "getLyrics":
@@ -259,6 +273,7 @@ export class Player {
     if (data.bandcamp_url) item.url = data.bandcamp_url;
     if (!item.trackCount) item.trackCount = item.tracks.length;
     if (!item.featured) item.featured = item.tracks.find((t) => t.id === data.featured_track_id) ?? null;
+    item.buy = toBuy(data);
     return item.tracks;
   }
 
@@ -436,6 +451,7 @@ export class Player {
    */
   private async onEnded(): Promise<void> {
     const cur = this.current;
+    if (cur) this.countPlay(cur.track.id);
     if (this.repeat && this.playMode === "album" && cur) {
       try {
         const tracks = await this.loadTracks(this.itemAt(cur.itemIndex));
@@ -630,6 +646,36 @@ export class Player {
     await this.next();
   }
 
+  // ---------- buy reminder ----------
+
+  /** A track played to its end. Only the latest MAX_PLAYS tracks are remembered. */
+  private countPlay(trackId: number): void {
+    const key = `t${trackId}`;
+    const n = (this.plays[key] || 0) + 1;
+    delete this.plays[key];
+    this.plays[key] = n;
+    const keys = Object.keys(this.plays);
+    for (const k of keys.slice(0, Math.max(0, keys.length - MAX_PLAYS))) delete this.plays[k];
+    void this.env.settings.save({ plays: this.plays });
+  }
+
+  /** Full plays of the release's most played track, once that reaches the artist's limit. */
+  private nudgeFor(item: Item, track: Track): { plays: number } | null {
+    if (!item.buy || item.owned || this.nudgeOff.includes(`${item.type}${item.id}`)) return null;
+    const ids = item.tracks ? item.tracks.map((t) => t.id) : [track.id];
+    const plays = Math.max(0, ...ids.map((id) => this.plays[`t${id}`] || 0));
+    return plays >= (item.buy.limit ?? DEFAULT_PLAY_LIMIT) ? { plays } : null;
+  }
+
+  private dismissNudge(): void {
+    const cur = this.current;
+    if (!cur) return;
+    const item = this.itemAt(cur.itemIndex);
+    this.nudgeOff = [...this.nudgeOff.filter((k) => k !== `${item.type}${item.id}`), `${item.type}${item.id}`].slice(-MAX_NUDGE_OFF);
+    void this.env.settings.save({ nudgeOff: this.nudgeOff });
+    this.broadcast();
+  }
+
   // ---------- wishlist ----------
 
   /**
@@ -739,6 +785,8 @@ export class Player {
                 wishlisted: curItem.wishlisted,
                 owned: curItem.owned,
                 tracks: curItem.tracks && curItem.tracks.map(wish),
+                buy: curItem.owned ? null : curItem.buy,
+                nudge: this.nudgeFor(curItem, cur.track),
               },
             }
           : null,

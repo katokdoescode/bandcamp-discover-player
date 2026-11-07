@@ -40,9 +40,18 @@
       <div class="now-meta">
         <h2 class="trackTitle" id="relTitle"></h2>
         <h3>by <a id="relArtist" target="_blank"></a><span class="year" id="relYear"></span><label class="toggle repeat" id="repeatToggle" title="repeat this release (beta)"><input type="checkbox" id="repeat"><span class="icon repeat-icon"></span></label></h3>
-        <button class="wishlist-link" id="relWish"><span class="wish-icon"></span><span class="label">Wishlist</span></button>
+        <div class="rel-actions">
+          <button class="wishlist-link" id="relWish"><span class="wish-icon"></span><span class="label">Wishlist</span></button>
+          <a class="buy-link" id="buyLink" target="_blank" hidden></a>
+        </div>
         <button class="link also-like" id="alsoLikeBtn" hidden>You may also like ›</button>
       </div>
+    </div>
+
+    <div class="nudge" id="nudge" hidden>
+      <span id="nudgeText"></span>
+      <a class="bc-button" id="nudgeBuy" target="_blank">buy</a>
+      <button class="close" id="nudgeClose" title="don't ask again for this release">×</button>
     </div>
 
     <div class="inline_player">
