@@ -85,7 +85,7 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 ### 1.1.0
 
-Support the artists: the player shows the release's price with a link to buy it on Bandcamp. After you've played a track to the end as many times as the artist allows before asking to buy (usually 3), it suggests buying the release. Close the reminder and it won't show again for that release. Play counts stay in your browser.
+Support the artists: the player shows what the release sells and for how much (album, track, physical editions, a track of an album sold on its own) with a link to buy it on Bandcamp. After you've played a track to the end as many times as the artist allows before asking to buy (usually 3), it suggests buying the release. Close the reminder and it won't show again for that release. Play counts stay in your browser.
 
 Fixes:
 - The wishlist heart works again on discover pages (Bandcamp moved what it needs) and when only an artist's page is open.

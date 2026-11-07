@@ -1,7 +1,7 @@
 import { browser, type Browser } from "wxt/browser";
 import { request } from "@/lib/messaging";
 import type { LyricsResult, PageSpec, PlayerCommand, PlayerEvent, PublicState, RecsResult } from "@/lib/types";
-import { buyLabel, formatTime as fmt, shouldAutoLoad } from "@/lib/util";
+import { buyLabel, buyTitle, formatTime as fmt, shouldAutoLoad } from "@/lib/util";
 
 type TabSpec = PageSpec & { sig: string | null };
 type Reply = { type: "reply"; reqId: number; result?: unknown; error?: string };
@@ -150,20 +150,28 @@ function render(): void {
     relWish.querySelector(".label")!.textContent = rel.owned ? "In your collection" : rel.wishlisted ? "In Wishlist" : "Wishlist";
     setWishState($<HTMLButtonElement>("trackWish"), cur.track.wishlisted, false, "track");
 
-    // Buying happens on Bandcamp: both links open the release page.
+    // Buying happens on Bandcamp: the links open the release or track page.
     const buyLink = $<HTMLAnchorElement>("buyLink");
     buyLink.hidden = !rel.buy;
     if (rel.buy) {
       buyLink.textContent = buyLabel(rel.buy);
+      buyLink.title = buyTitle(rel.buy);
       buyLink.href = rel.url;
     }
-    $("nudge").hidden = !rel.nudge || !rel.buy;
-    if (rel.nudge && rel.buy) {
-      $("nudgeText").textContent = rel.buy.free
+    const trackBuy = $<HTMLAnchorElement>("trackBuyLink");
+    trackBuy.hidden = !rel.trackBuy;
+    if (rel.trackBuy) {
+      trackBuy.textContent = buyLabel(rel.trackBuy);
+      trackBuy.title = `Buy “${cur.track.title}” on its own`;
+      trackBuy.href = rel.trackBuy.url;
+    }
+    $("nudge").hidden = !rel.nudge;
+    if (rel.nudge) {
+      $("nudgeText").textContent = rel.nudge.free
         ? `You've played this ${rel.nudge.plays} times. It's a free download from ${rel.artist}.`
         : `You've played this ${rel.nudge.plays} times. Buy it to support ${rel.artist}.`;
-      $("nudgeBuy").textContent = rel.buy.free ? "download" : "buy";
-      $<HTMLAnchorElement>("nudgeBuy").href = rel.url;
+      $("nudgeBuy").textContent = rel.nudge.free ? "download" : "buy";
+      $<HTMLAnchorElement>("nudgeBuy").href = rel.nudge.url;
     }
     const lyricsBtn = $("lyricsBtn");
     lyricsBtn.hidden = !cur.track.hasLyrics;

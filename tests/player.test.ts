@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { OWN_MARK } from "@/lib/bandcamp";
 import { Player } from "@/lib/player";
-import { ARTIST, artistApi, capture, defaultApi, disco, recsPage, result, setup, trackPage, trackUrl } from "./fixtures";
+import { ARTIST, artistApi, capture, defaultApi, details, disco, recsPage, result, setup, trackPage, trackUrl } from "./fixtures";
 
 const TAB = 7;
 const playing = (audio: { src: string }) => audio.src;
@@ -557,7 +557,7 @@ describe("buying", () => {
 
     // A track played to its end counts.
     audio.fire("ended");
-    await vi.waitFor(() => expect(view().current!.release.nudge).toEqual({ plays: 3 }));
+    await vi.waitFor(() => expect(view().current!.release.nudge).toMatchObject({ plays: 3, free: false }));
     expect(settings.plays).toEqual({ t10: 3 });
 
     await player.handle({ cmd: "dismissNudge" });
@@ -568,7 +568,25 @@ describe("buying", () => {
   it("uses Bandcamp's usual limit of 3 when the release has none", async () => {
     const { player, view } = await setup({ capture: capture([1]), api: soldApi(null), settings: { plays: { t10: 3 } } });
     await player.handle({ cmd: "loadFromTab", tabId: TAB });
-    await vi.waitFor(() => expect(view().current!.release.nudge).toEqual({ plays: 3 }));
+    await vi.waitFor(() => expect(view().current!.release.nudge).toMatchObject({ plays: 3, free: false }));
+  });
+
+  it("offers a track of an album that is sold on its own", async () => {
+    const api = defaultApi();
+    const tracksOnly = (url: string) => {
+      const d = api(url) as ReturnType<typeof details> | undefined;
+      if (!d || !("tracks" in d)) return d;
+      Object.assign(d.tracks[0]!, { is_purchasable: true, is_set_price: true, price: 1, currency: "USD" });
+      return { ...d, is_purchasable: false };
+    };
+    const { player, view } = await setup({ capture: capture([1]), api: tracksOnly, settings: { plays: { t10: 3 } } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.tracks).toBeTruthy());
+
+    expect(view().current!.release.buy).toBeNull();
+    expect(view().current!.release.trackBuy).toMatchObject({ what: "track", price: 1, url: trackUrl(10) });
+    // Only the track can be bought, so the reminder points to it.
+    expect(view().current!.release.nudge).toEqual({ plays: 3, url: trackUrl(10), free: false });
   });
 
   it("doesn't ask for releases that can't be bought", async () => {

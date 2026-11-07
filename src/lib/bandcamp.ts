@@ -144,6 +144,8 @@ export interface TralbumDetails {
   currency?: string;
   /** Full plays allowed before the artist asks to buy. */
   streaming_limit?: number | null;
+  /** Physical editions by package id. */
+  package_details_lite?: Record<string, { title?: string }> | null;
   tracks?: {
     track_id: number;
     track_num?: number;
@@ -154,13 +156,26 @@ export interface TralbumDetails {
     streaming_url?: Record<string, string> | null;
     has_lyrics?: boolean;
     track_url?: string;
+    /** Sold on its own. */
+    is_purchasable?: boolean;
+    is_set_price?: boolean;
+    price?: number;
+    currency?: string;
   }[];
 }
 
-/** How a release is sold, from a tralbum_details response; null when it can't be bought. */
-export function toBuy(data: TralbumDetails): Buy | null {
-  if (!data.is_purchasable && !data.free_download) return null;
+/**
+ * How a release is sold, from a tralbum_details response: its download, its physical
+ * editions, or both. Null when neither can be bought.
+ */
+export function toBuy(data: TralbumDetails, what: Buy["what"]): Buy | null {
+  const digital = !!(data.is_purchasable || data.free_download);
+  const editions = Object.values(data.package_details_lite || {}).flatMap((p) => (p?.title ? [p.title] : []));
+  if (!digital && !editions.length) return null;
   return {
+    what,
+    digital,
+    editions,
     price: Number(data.price) || 0,
     currency: data.currency || "USD",
     nameYourPrice: data.is_set_price === false,
@@ -186,6 +201,19 @@ export function toTracks(data: TralbumDetails): Track[] {
         duration: t.duration,
         hasLyrics: !!t.has_lyrics,
         url: t.track_url,
+        buy: t.is_purchasable
+          ? {
+              what: "track" as const,
+              digital: true,
+              editions: [],
+              price: Number(t.price) || 0,
+              currency: t.currency || data.currency || "USD",
+              nameYourPrice: t.is_set_price === false,
+              free: false,
+              preorder: false,
+              limit: null,
+            }
+          : null,
       },
     ];
   });

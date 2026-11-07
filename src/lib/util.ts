@@ -56,11 +56,20 @@ export function formatPrice(amount: number, currency: string): string {
   }
 }
 
-/** Text of the buy link: "Buy · $7", "Buy · $5 or more", "Buy · name your price", "Free download". */
+/**
+ * Text of a buy link: "Buy album · $7", "Buy track · name your price", "Pre-order album · $5 or more",
+ * "Free download", or "Buy · 2 physical editions" when only vinyl, CDs and the like are sold.
+ */
 export function buyLabel(buy: Buy): string {
+  if (!buy.digital) return buy.editions.length === 1 ? "Buy · physical edition" : `Buy · ${buy.editions.length} physical editions`;
   if (buy.free) return "Free download";
-  const verb = buy.preorder ? "Pre-order" : "Buy";
+  const verb = `${buy.preorder ? "Pre-order" : "Buy"} ${buy.what}`;
   if (buy.nameYourPrice && !buy.price) return `${verb} · name your price`;
   const price = formatPrice(buy.price, buy.currency);
   return `${verb} · ${buy.nameYourPrice ? `${price} or more` : price}`;
+}
+
+/** Tooltip of a buy link: the physical editions sold besides the download. */
+export function buyTitle(buy: Buy): string {
+  return buy.editions.length ? `Also on Bandcamp: ${buy.editions.join("; ")}` : "Opens the release page on Bandcamp";
 }

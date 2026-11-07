@@ -25,6 +25,7 @@ import type { BandDetails, Recommendations, TralbumDetails } from "./bandcamp";
 import type {
   ArtistOrder,
   ArtistSpec,
+  Buy,
   Capture,
   ContentMessage,
   DiscoverResponse,
@@ -273,7 +274,7 @@ export class Player {
     if (data.bandcamp_url) item.url = data.bandcamp_url;
     if (!item.trackCount) item.trackCount = item.tracks.length;
     if (!item.featured) item.featured = item.tracks.find((t) => t.id === data.featured_track_id) ?? null;
-    item.buy = toBuy(data);
+    item.buy = toBuy(data, item.type === "t" ? "track" : "album");
     return item.tracks;
   }
 
@@ -659,12 +660,27 @@ export class Player {
     void this.env.settings.save({ plays: this.plays });
   }
 
-  /** Full plays of the release's most played track, once that reaches the artist's limit. */
-  private nudgeFor(item: Item, track: Track): { plays: number } | null {
-    if (!item.buy || item.owned || this.nudgeOff.includes(`${item.type}${item.id}`)) return null;
-    const ids = item.tracks ? item.tracks.map((t) => t.id) : [track.id];
-    const plays = Math.max(0, ...ids.map((id) => this.plays[`t${id}`] || 0));
-    return plays >= (item.buy.limit ?? DEFAULT_PLAY_LIMIT) ? { plays } : null;
+  /**
+   * Once the release's most played track reaches the artist's limit of full plays: the
+   * release to buy, or that track when only tracks are sold on their own.
+   */
+  private nudgeFor(item: Item, track: Track): { plays: number; url: string; free: boolean } | null {
+    if (item.buy === undefined || item.owned || this.nudgeOff.includes(`${item.type}${item.id}`)) return null;
+    const tracks = item.tracks ?? [track];
+    let top = tracks[0];
+    for (const t of tracks) if ((this.plays[`t${t.id}`] || 0) > (this.plays[`t${top!.id}`] || 0)) top = t;
+    if (!top) return null;
+    const plays = this.plays[`t${top.id}`] || 0;
+    if (plays < (item.buy?.limit ?? DEFAULT_PLAY_LIMIT)) return null;
+    if (item.buy) return { plays, url: item.url, free: item.buy.digital && item.buy.free };
+    return top.buy && top.url ? { plays, url: top.url, free: false } : null;
+  }
+
+  /** The playing track of an album, when it is also sold on its own. */
+  private trackBuyFor(item: Item, track: Track): (Buy & { url: string }) | null {
+    if (item.type !== "a" || item.owned) return null;
+    const t = item.tracks?.find((x) => x.id === track.id);
+    return t?.buy && t.url ? { ...t.buy, url: t.url } : null;
   }
 
   private dismissNudge(): void {
@@ -786,6 +802,7 @@ export class Player {
                 owned: curItem.owned,
                 tracks: curItem.tracks && curItem.tracks.map(wish),
                 buy: curItem.owned ? null : curItem.buy,
+                trackBuy: this.trackBuyFor(curItem, cur.track),
                 nudge: this.nudgeFor(curItem, cur.track),
               },
             }

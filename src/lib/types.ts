@@ -82,6 +82,8 @@ export interface Track {
   hasLyrics?: boolean;
   /** Track page, where the lyrics text lives. */
   url?: string;
+  /** Set when the track is also sold on its own, from tralbum_details. */
+  buy?: Buy | null;
 }
 
 export interface Item {
@@ -105,9 +107,15 @@ export interface Item {
   buy?: Buy | null;
 }
 
-/** Price and terms of a release on Bandcamp. */
+/** Price and terms of a release (or a single track) on Bandcamp. */
 export interface Buy {
-  /** The price, or the minimum when the buyer names their price. */
+  /** What the digital purchase is. */
+  what: "album" | "track";
+  /** The download can be bought; false when only physical editions are sold. */
+  digital: boolean;
+  /** Physical editions (vinyl, CD, cassette…) by title. */
+  editions: string[];
+  /** The price of the download, or the minimum when the buyer names their price. */
   price: number;
   currency: string;
   nameYourPrice: boolean;
@@ -181,8 +189,10 @@ export interface PublicState {
       tracks: (Track & { wishlisted: boolean })[] | null;
       /** Null when it can't be bought or is already owned; undefined until the tracklist loads. */
       buy: Buy | null | undefined;
-      /** Full plays of the most played track, when that reached the artist's limit; else null. */
-      nudge: { plays: number } | null;
+      /** The playing track, when it is also sold on its own (a track of an album). */
+      trackBuy: (Buy & { url: string }) | null;
+      /** Full plays of the most played track, once that reached the artist's limit: what to buy. */
+      nudge: { plays: number; url: string; free: boolean } | null;
     };
   } | null;
   queue: {
