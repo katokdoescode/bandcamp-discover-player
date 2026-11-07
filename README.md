@@ -46,9 +46,16 @@ In Chrome, unzip one and load the folder as above.
 ## Features
 
 - **play this page** — plays exactly the releases shown on the open discover page
-  (including those loaded with "View more results"), then keeps loading more.
+  (including those loaded with "View more results"), then loads more by itself
+  when you scroll near the end of the list or playback gets there.
 - **one track per release** / **full releases** — one track from each release, or every release in full.
 - **shuffle** — shuffles releases; tracks within a release stay in order.
+- **you may also like** — the recommendations from the playing release's page, in a third tab; they always play
+  in full, starting from the one you click.
+- **play all releases** — on an artist's or label's own `<name>.bandcamp.com` pages (home, music, album or track):
+  their whole discography, newest or oldest first.
+- **repeat** (beta, full releases only) — loops the current release; next/previous still leave it.
+- **lyrics** — shown in place of the list for tracks that have them (in both modes); they follow the playing track.
 - The release year is shown next to the artist and in the list.
 - After the page is reloaded (`s=rand` gives new results every time) or its filters
   change, the player offers **update list**; the current track keeps playing.
@@ -133,6 +140,9 @@ tests/                       Vitest
 Bandcamp endpoints used:
 - `POST /api/discover/1/discover_web` — discover results;
 - `GET /api/mobile/25/tralbum_details` — a release's tracklist with mp3-128 links;
+- `POST /api/mobile/25/band_details` — an artist's or label's discography;
+- track pages on `*.bandcamp.com` — lyrics text (read from the page's ld+json);
+- release pages on `*.bandcamp.com` — the "you may also like" section;
 - `POST /collect_item_cb`, `/uncollect_item_cb` — wishlist, same as the site's button.
 
 ## Releases

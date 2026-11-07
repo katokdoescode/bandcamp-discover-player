@@ -14,10 +14,24 @@ export interface DiscoverParams {
 
 /** What the content script reports about a discover page. */
 export interface DiscoverSpec {
+  kind?: "discover";
   pageUrl: string;
   label: string;
   params: DiscoverParams;
 }
+
+/** What the content script reports about an artist's or label's page on <name>.bandcamp.com. */
+export interface ArtistSpec {
+  kind: "artist";
+  /** The artist's /music page, the same for all of its pages. */
+  pageUrl: string;
+  label: string;
+  bandId: number;
+}
+
+export type PageSpec = DiscoverSpec | ArtistSpec;
+
+export type ArtistOrder = "newest" | "oldest";
 
 /** One release as returned by discover_web. */
 export interface DiscoverResult {
@@ -64,6 +78,10 @@ export interface Track {
   artist?: string;
   stream: string;
   duration: number;
+  /** From tralbum_details; unknown for discover's featured track until the tracklist loads. */
+  hasLyrics?: boolean;
+  /** Track page, where the lyrics text lives. */
+  url?: string;
 }
 
 export interface Item {
@@ -79,20 +97,30 @@ export interface Item {
   owned: boolean;
   /** Release year; missing in snapshots saved before 0.3.0. */
   year?: number | null;
+  /** Release date (ms since epoch), for sorting an artist's releases. */
+  released?: number | null;
   featured: Track | null;
   tracks: Track[] | null;
 }
 
 export type Mode = "track" | "album";
 
+/** Keys of Settings, as read from extension storage. */
+export const SETTINGS_KEYS = ["mode", "shuffle", "repeat", "artistOrder"] as const;
+
 export interface Settings {
   mode: Mode;
   shuffle: boolean;
+  /** Loop the current release (full releases mode only). */
+  repeat: boolean;
+  /** Order of an artist's releases. */
+  artistOrder: ArtistOrder;
 }
 
 /** Messages the extension sends to the bandcamp.com content script. */
 export type ContentMessage =
   | { type: "getDiscoverSpec" }
+  | { type: "getArtistSpec" }
   | { type: "getFanId" }
   | { type: "apiFetch"; url: string; method: string; body?: unknown }
   | {
@@ -106,10 +134,12 @@ export type ContentMessage =
 
 /** State the popup renders. */
 export interface PublicState {
-  source: { label: string; pageUrl: string; sig: string | null } | null;
+  source: { kind: "discover" | "artist" | "recs"; label: string; pageUrl: string; sig: string | null } | null;
   notice: "login" | null;
   mode: Mode;
   shuffle: boolean;
+  repeat: boolean;
+  artistOrder: ArtistOrder;
   loading: boolean;
   error: string | null;
   hasMore: boolean;
@@ -126,6 +156,8 @@ export interface PublicState {
       url: string;
       art: string | null;
       year: number | null;
+      /** The release page can be read for "you may also like". */
+      hasRecs: boolean;
       wishlisted: boolean;
       owned: boolean;
       tracks: (Track & { wishlisted: boolean })[] | null;
@@ -156,10 +188,23 @@ export type PlayerCommand =
   | { cmd: "seek"; fraction: number }
   | { cmd: "playTrack"; itemIndex: number; trackId?: number }
   | { cmd: "setShuffle"; on: boolean }
+  | { cmd: "setRepeat"; on: boolean }
+  | { cmd: "setArtistOrder"; order: ArtistOrder }
   | { cmd: "setMode"; mode: Mode }
   | { cmd: "toggleWishlist"; itemIndex: number; trackId?: number }
   | { cmd: "dismissNotice" }
-  | { cmd: "loadMore" };
+  | { cmd: "loadMore" }
+  | { cmd: "getLyrics"; itemIndex: number; trackId: number }
+  | { cmd: "getRecs"; url: string }
+  | { cmd: "playRecs"; url: string; index: number };
+
+/** Answer to getLyrics: the text (null when the track has none), or why it could not be loaded. */
+export type LyricsResult = { text: string | null } | { error: string };
+
+/** Answer to getRecs: the releases recommended on a release page, or why they could not be loaded. */
+export type RecsResult =
+  | { title: string | null; items: { title: string; artist: string; url: string; thumb: string | null }[] }
+  | { error: string };
 
 /** Player → popup events. */
 export type PlayerEvent =

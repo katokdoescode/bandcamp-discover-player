@@ -3,18 +3,39 @@
 // storage) comes in through PlayerEnv, so the same code runs in Firefox's
 // background page, in Chrome's offscreen document and in unit tests.
 
-import { DISCOVER_URL, OWN_MARK, PAGE_SIZE, artUrl, normalizeResults, releaseYear, toItem, toTracks, tralbumDetailsUrl } from "./bandcamp";
-import type { TralbumDetails } from "./bandcamp";
+import {
+  BAND_DETAILS_URL,
+  DISCOVER_URL,
+  OWN_MARK,
+  PAGE_SIZE,
+  artUrl,
+  byReleaseDate,
+  isBandcampPage,
+  parseRecommendations,
+  normalizeResults,
+  parseLyrics,
+  releaseYear,
+  toArtistItems,
+  toItem,
+  toTracks,
+  tralbumDetailsUrl,
+} from "./bandcamp";
+import type { BandDetails, Recommendations, TralbumDetails } from "./bandcamp";
 import type {
+  ArtistOrder,
+  ArtistSpec,
   Capture,
   ContentMessage,
   DiscoverResponse,
   DiscoverSpec,
   Item,
+  LyricsResult,
   Mode,
+  PageSpec,
   PlayerCommand,
   PlayerEvent,
   PublicState,
+  RecsResult,
   Settings,
   Track,
 } from "./types";
@@ -43,6 +64,8 @@ export interface PlayerEnv {
   sendToTab<T>(tabId: number, msg: ContentMessage): Promise<T>;
   /** Fetches JSON directly; resolves to undefined when the answer is not JSON (bot challenge, network). */
   fetchJson(url: string, body?: unknown): Promise<unknown>;
+  /** Fetches a page's HTML directly; undefined when it is not available. */
+  fetchText(url: string): Promise<string | undefined>;
   getCapture(tabId: number): Promise<Capture | undefined>;
   settings: {
     load(): Promise<Partial<Settings>>;
@@ -64,12 +87,12 @@ export interface Snapshot {
   time: number;
 }
 
-interface Source {
-  label: string;
-  pageUrl: string;
-  params: DiscoverSpec["params"];
-  sig: string | null;
-}
+/** Where the list comes from. Snapshots saved before 1.0.0 have no `kind`: discover. */
+type Source =
+  | { kind?: "discover"; label: string; pageUrl: string; params: DiscoverSpec["params"]; sig: string | null }
+  | { kind: "artist"; label: string; pageUrl: string; bandId: number; sig: null }
+  /** "You may also like" of the release at pageUrl. */
+  | { kind: "recs"; label: string; pageUrl: string; sig: null };
 
 interface Current {
   itemIndex: number;
@@ -89,6 +112,8 @@ export class Player {
   private current: Current | null = null;
   private mode: Mode = "track";
   private shuffle = false;
+  private repeat = false;
+  private artistOrder: ArtistOrder = "newest";
   private loading = false;
   private error: string | null = null;
   private notice: "login" | null = null;
@@ -98,13 +123,17 @@ export class Player {
   /** Bumps on every play request, so stale async work can bail out. */
   private playGen = 0;
   private retried = false;
+  /** Lyrics by track id; null when the track page has none. */
+  private lyrics = new Map<number, string | null>();
+  /** "You may also like" by release page url. */
+  private recs = new Map<string, Recommendations>();
   private resumeAt = 0;
   private lastTick = 0;
   private listeners = new Set<(e: PlayerEvent) => void>();
 
   constructor(private env: PlayerEnv) {
     const a = env.audio;
-    a.on("ended", () => void this.next());
+    a.on("ended", () => void this.onEnded());
     a.on("play", () => this.broadcast());
     a.on("pause", () => this.broadcast());
     a.on("loadedmetadata", () => this.broadcast());
@@ -117,10 +146,17 @@ export class Player {
     a.on("error", () => void this.onAudioError());
   }
 
+  /** Recommendations always play whole releases; the user's own mode stays saved for other lists. */
+  private get playMode(): Mode {
+    return this.source?.kind === "recs" ? "album" : this.mode;
+  }
+
   async init(snapshot?: Snapshot | null): Promise<void> {
     const s = await this.env.settings.load().catch(() => ({}) as Partial<Settings>);
     if (s.mode === "track" || s.mode === "album") this.mode = s.mode;
     if (typeof s.shuffle === "boolean") this.shuffle = s.shuffle;
+    if (typeof s.repeat === "boolean") this.repeat = s.repeat;
+    if (s.artistOrder === "newest" || s.artistOrder === "oldest") this.artistOrder = s.artistOrder;
     if (snapshot) this.restore(snapshot);
   }
 
@@ -153,6 +189,13 @@ export class Player {
           return this.playTrack(c.itemIndex, c.trackId);
         case "setShuffle":
           return this.setShuffle(c.on);
+        case "setRepeat":
+          this.repeat = c.on;
+          void this.env.settings.save({ repeat: c.on });
+          this.broadcast();
+          return;
+        case "setArtistOrder":
+          return this.setArtistOrder(c.order);
         case "setMode":
           return this.setMode(c.mode);
         case "toggleWishlist":
@@ -163,6 +206,12 @@ export class Player {
           return;
         case "loadMore":
           return this.fetchNextPage();
+        case "getLyrics":
+          return this.getLyrics(c.itemIndex, c.trackId);
+        case "getRecs":
+          return this.getRecs(c.url);
+        case "playRecs":
+          return this.playRecs(c.url, c.index);
       }
     } catch (e) {
       this.error = errorMessage(e);
@@ -198,18 +247,23 @@ export class Player {
     const data = await this.api<TralbumDetails>(tralbumDetailsUrl(item));
     item.tracks = toTracks(data);
     if (item.year == null) item.year = releaseYear(data.release_date);
+    // An artist's discography lists releases without these.
+    if (data.bandcamp_url) item.url = data.bandcamp_url;
+    if (!item.trackCount) item.trackCount = item.tracks.length;
+    if (!item.featured) item.featured = item.tracks.find((t) => t.id === data.featured_track_id) ?? null;
     return item.tracks;
   }
 
   // ---------- discover results ----------
 
   private async fetchNextPage(): Promise<void> {
-    if (!this.source || this.exhausted || this.loading) return;
+    const src = this.source;
+    if (!src || (src.kind && src.kind !== "discover") || this.exhausted || this.loading) return;
     this.loading = true;
     this.broadcast();
     try {
       const data = await this.api<DiscoverResponse>(`${DISCOVER_URL}?${OWN_MARK}`, {
-        ...this.source.params,
+        ...src.params,
         cursor: this.cursor || "*",
         size: PAGE_SIZE,
       });
@@ -230,11 +284,52 @@ export class Player {
     }
   }
 
+  /** What the tab shows: a discover page or an artist's page; null for anything else. */
+  private async pageSpec(tabId: number): Promise<PageSpec | null> {
+    const discover = await this.env.sendToTab<DiscoverSpec | null>(tabId, { type: "getDiscoverSpec" }).catch(() => null);
+    if (discover) return { ...discover, kind: "discover" };
+    return this.env.sendToTab<ArtistSpec | null>(tabId, { type: "getArtistSpec" }).catch(() => null);
+  }
+
   private async inspectTab(tabId: number) {
-    const spec = await this.env.sendToTab<DiscoverSpec | null>(tabId, { type: "getDiscoverSpec" }).catch(() => null);
+    const spec = await this.pageSpec(tabId);
     if (!spec) return null;
+    if (spec.kind === "artist") return { ...spec, sig: null };
     const cap = await this.env.getCapture(tabId);
     return { ...spec, sig: cap ? cap.sig : null };
+  }
+
+  /** Release order before shuffling: as discover sent them, or by date for an artist. */
+  private baseOrder(): number[] {
+    return this.source?.kind === "artist" ? byReleaseDate(this.items, this.artistOrder) : range(0, this.items.length);
+  }
+
+  /** Plays everything an artist (or label) has released, from band_details. */
+  private async loadArtist(spec: ArtistSpec): Promise<void> {
+    const data = await this.api<BandDetails>(BAND_DETAILS_URL, { band_id: spec.bandId });
+    const items = toArtistItems(data, spec.pageUrl.replace(/\/music$/, ""));
+    if (!items.length) throw new Error("This artist has no releases to play.");
+    this.stop();
+    this.source = { kind: "artist", label: spec.label, pageUrl: spec.pageUrl, bandId: spec.bandId, sig: null };
+    this.items = items;
+    this.cursor = null;
+    this.exhausted = true;
+    const base = this.baseOrder();
+    this.order = this.shuffle ? shuffled(base, this.env.random) : base;
+    this.pos = -1;
+    this.current = null;
+    this.error = null;
+    this.broadcast();
+  }
+
+  private setArtistOrder(order: ArtistOrder): void {
+    this.artistOrder = order;
+    void this.env.settings.save({ artistOrder: order });
+    if (this.source?.kind === "artist" && !this.shuffle) {
+      this.order = this.baseOrder();
+      this.pos = this.current ? this.order.indexOf(this.current.itemIndex) : -1;
+    }
+    this.broadcast();
   }
 
   /**
@@ -243,8 +338,12 @@ export class Player {
    * of the new list. Returns true in that case.
    */
   private async loadSourceFromTab(tabId: number): Promise<boolean> {
-    const spec = await this.env.sendToTab<DiscoverSpec | null>(tabId, { type: "getDiscoverSpec" });
-    if (!spec) throw new Error("This is not a Bandcamp discover page.");
+    const spec = await this.pageSpec(tabId);
+    if (!spec) throw new Error("This is not a Bandcamp discover or artist page.");
+    if (spec.kind === "artist") {
+      await this.loadArtist(spec);
+      return false;
+    }
     const cap = await this.env.getCapture(tabId);
     const cur = this.current;
     const keep =
@@ -256,7 +355,7 @@ export class Player {
     const fresh = cap ? cap.results.map(toItem) : [];
     const items = keep ? [keep, ...fresh.filter((i) => i.id !== keep.id)] : fresh;
     const rest = range(keep ? 1 : 0, items.length);
-    this.source = { label: spec.label, pageUrl: spec.pageUrl, params: cap ? cap.params : spec.params, sig: cap ? cap.sig : null };
+    this.source = { kind: "discover", label: spec.label, pageUrl: spec.pageUrl, params: cap ? cap.params : spec.params, sig: cap ? cap.sig : null };
     this.items = items;
     this.cursor = cap ? cap.cursor : null;
     this.exhausted = cap ? !cap.cursor : false;
@@ -272,11 +371,11 @@ export class Player {
   // ---------- playback ----------
 
   private async trackFor(item: Item, pick: Pick): Promise<Track | null> {
-    if (this.mode === "track" && item.featured && typeof pick !== "number") return item.featured;
+    if (this.playMode === "track" && item.featured && typeof pick !== "number") return item.featured;
     const tracks = await this.loadTracks(item);
     if (!tracks.length) return null;
     if (typeof pick === "number") return tracks.find((t) => t.id === pick) ?? tracks[0] ?? null;
-    if (this.mode === "track") return item.featured ?? tracks[0] ?? null;
+    if (this.playMode === "track") return item.featured ?? tracks[0] ?? null;
     return (pick === "last" ? tracks[tracks.length - 1] : tracks[0]) ?? null;
   }
 
@@ -301,6 +400,9 @@ export class Player {
         this.pos = pos;
         this.current = { itemIndex, track };
         this.startAudio(track.stream);
+        // Discover's featured track says nothing about lyrics: the tracklist does.
+        const item = this.itemAt(itemIndex);
+        if (!item.tracks) this.loadTracks(item).then(() => this.broadcast(), () => {});
         return;
       }
       pos += direction;
@@ -320,9 +422,27 @@ export class Player {
     this.broadcast();
   }
 
+  /**
+   * A track finished. With repeat on in full releases mode, the last track of a release
+   * loops back to its first; otherwise (and for manual next/prev) playback moves on.
+   */
+  private async onEnded(): Promise<void> {
+    const cur = this.current;
+    if (this.repeat && this.playMode === "album" && cur) {
+      try {
+        const tracks = await this.loadTracks(this.itemAt(cur.itemIndex));
+        const idx = tracks.findIndex((t) => t.id === cur.track.id);
+        if (idx >= 0 && idx === tracks.length - 1) return this.playTrack(cur.itemIndex, tracks[0]!.id);
+      } catch {
+        // fall through to the next track
+      }
+    }
+    return this.next();
+  }
+
   async next(): Promise<void> {
     const cur = this.current;
-    if (this.mode === "album" && cur) {
+    if (this.playMode === "album" && cur) {
       try {
         const tracks = await this.loadTracks(this.itemAt(cur.itemIndex));
         const idx = tracks.findIndex((t) => t.id === cur.track.id);
@@ -342,7 +462,7 @@ export class Player {
       return;
     }
     const cur = this.current;
-    if (this.mode === "album" && cur) {
+    if (this.playMode === "album" && cur) {
       const tracks = this.itemAt(cur.itemIndex).tracks || [];
       const idx = tracks.findIndex((t) => t.id === cur.track.id);
       const previous = idx > 0 ? tracks[idx - 1] : undefined;
@@ -353,6 +473,69 @@ export class Player {
       return;
     }
     return this.playPos(this.pos - 1, "last", -1);
+  }
+
+  /**
+   * Lyrics of a track, fetched from its page on Bandcamp. Never throws: a failure is
+   * the answer's own business, not the player's error line.
+   */
+  private async getLyrics(itemIndex: number, trackId: number): Promise<LyricsResult> {
+    if (this.lyrics.has(trackId)) return { text: this.lyrics.get(trackId)! };
+    try {
+      const tracks = await this.loadTracks(this.itemAt(itemIndex));
+      const track = tracks.find((t) => t.id === trackId);
+      if (!track?.hasLyrics || !isBandcampPage(track.url)) return { text: null };
+      const html = await this.env.fetchText(track.url).catch(() => undefined);
+      if (html === undefined) return { error: "Could not load the lyrics. Try again later." };
+      const text = parseLyrics(html);
+      this.lyrics.set(trackId, text);
+      return { text };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
+  }
+
+  // ---------- you may also like ----------
+
+  private async loadRecs(url: string): Promise<Recommendations> {
+    const cached = this.recs.get(url);
+    if (cached) return cached;
+    if (!isBandcampPage(url)) throw new Error("Recommendations are only available for releases on bandcamp.com.");
+    const html = await this.env.fetchText(url).catch(() => undefined);
+    if (html === undefined) throw new Error("Could not load the recommendations. Try again later.");
+    const recs = parseRecommendations(html);
+    this.recs.set(url, recs);
+    return recs;
+  }
+
+  /** The releases a release page recommends, for the popup to list. Never throws, like getLyrics. */
+  private async getRecs(url: string): Promise<RecsResult> {
+    try {
+      const r = await this.loadRecs(url);
+      return { title: r.title, items: r.items.map((it) => ({ title: it.title, artist: it.artist, url: it.url, thumb: artUrl(it.artId, 3) })) };
+    } catch (e) {
+      return { error: errorMessage(e) };
+    }
+  }
+
+  /** Makes a release page's recommendations the list and plays the chosen one, in full. */
+  private async playRecs(url: string, index: number): Promise<void> {
+    const r = await this.loadRecs(url);
+    if (!r.items.length) throw new Error("This release has no recommendations.");
+    const from = this.items.find((it) => it.url === url);
+    this.stop();
+    this.source = { kind: "recs", label: from ? `like ${from.title}` : "you may also like", pageUrl: url, sig: null };
+    // Copies: tracklists loaded while playing must not leak into the cached list.
+    this.items = r.items.map((it) => ({ ...it, tracks: null }));
+    this.cursor = null;
+    this.exhausted = true;
+    const base = this.baseOrder();
+    const start = base[Math.min(Math.max(index, 0), base.length - 1)]!;
+    this.order = this.shuffle ? [start, ...shuffled(base.filter((i) => i !== start), this.env.random)] : base;
+    this.pos = -1;
+    this.current = null;
+    this.error = null;
+    await this.playPos(this.order.indexOf(start));
   }
 
   /** Plays a specific track (or the default track) of a release from the list. */
@@ -396,8 +579,8 @@ export class Player {
       this.order = curIndex != null ? [curIndex, ...rest] : rest;
       this.pos = curIndex != null ? 0 : -1;
     } else {
-      this.order = all;
-      this.pos = curIndex ?? -1;
+      this.order = this.baseOrder();
+      this.pos = curIndex != null ? this.order.indexOf(curIndex) : -1;
     }
     void this.env.settings.save({ shuffle: on });
     this.broadcast();
@@ -513,12 +696,18 @@ export class Player {
     const a = this.env.audio;
     const cur = this.current;
     const curItem = cur ? this.items[cur.itemIndex] : null;
-    const wish = (t: Track) => ({ ...t, wishlisted: !!this.trackWish[t.id] });
+    const known = (t: Track) => curItem?.tracks?.find((x) => x.id === t.id) ?? t;
+    const wish = (t: Track) => {
+      const k = known(t);
+      return { ...t, wishlisted: !!this.trackWish[t.id], hasLyrics: !!k.hasLyrics && isBandcampPage(k.url) };
+    };
     return {
-      source: this.source && { label: this.source.label, pageUrl: this.source.pageUrl, sig: this.source.sig },
+      source: this.source && { kind: this.source.kind ?? "discover", label: this.source.label, pageUrl: this.source.pageUrl, sig: this.source.sig },
       notice: this.notice,
-      mode: this.mode,
+      mode: this.playMode,
       shuffle: this.shuffle,
+      repeat: this.repeat,
+      artistOrder: this.artistOrder,
       loading: this.loading,
       error: this.error,
       hasMore: !this.exhausted,
@@ -537,6 +726,7 @@ export class Player {
                 url: curItem.url,
                 art: artUrl(curItem.artId, 2),
                 year: curItem.year ?? null,
+                hasRecs: isBandcampPage(curItem.url) && /\/(album|track)\//.test(curItem.url),
                 wishlisted: curItem.wishlisted,
                 owned: curItem.owned,
                 tracks: curItem.tracks && curItem.tracks.map(wish),

@@ -1,9 +1,9 @@
 import { browser, type Browser } from "wxt/browser";
 import { request } from "@/lib/messaging";
-import type { DiscoverSpec, PlayerCommand, PlayerEvent, PublicState } from "@/lib/types";
-import { formatTime as fmt } from "@/lib/util";
+import type { LyricsResult, PageSpec, PlayerCommand, PlayerEvent, PublicState, RecsResult } from "@/lib/types";
+import { formatTime as fmt, shouldAutoLoad } from "@/lib/util";
 
-type TabSpec = DiscoverSpec & { sig: string | null };
+type TabSpec = PageSpec & { sig: string | null };
 type Reply = { type: "reply"; reqId: number; result?: unknown; error?: string };
 type Command = PlayerCommand extends infer C ? (C extends { cmd: infer K } ? Omit<C, "cmd"> & { cmd: K } : never) : never;
 
@@ -11,11 +11,18 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 let port: Browser.runtime.Port | null = null;
 let state: PublicState | null = null;
-let tabSpec: TabSpec | null = null; // discover filters of the active tab, if it is a discover page
+let tabSpec: TabSpec | null = null; // what the active tab shows, if it is a discover or artist page
 let activeTabId: number | null = null;
 let queueKey = "";
 let dragging = false;
 let reqSeq = 0;
+/** The track whose lyrics replace the queue; `follow` keeps it on the playing track. */
+let lyricsView: { itemIndex: number; trackId: number; title: string; follow: boolean } | null = null;
+let lyricsShown = ""; // itemIndex:trackId of the text on screen
+/** The release whose recommendations replace the queue; it stays put when playback moves on. */
+let recsView: { url: string; release: string } | null = null;
+let recsShown = ""; // url of the recommendations on screen
+let autoLoadSent = false; // a loadMore request is in flight
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
 // The player may need starting first (Chrome's offscreen document), and Chrome
@@ -116,8 +123,9 @@ function render(): void {
   const reloaded = samePage && !!tabSpec!.sig && tabSpec!.sig !== state.source!.sig;
   $("banner").hidden = !tabSpec || (samePage && !reloaded);
   if (tabSpec) $("bannerSpec").textContent = tabSpec.label;
-  $("bannerLabel").textContent = reloaded ? "this page has new releases" : "this page";
-  $("loadBtn").textContent = reloaded ? "update list" : "play this page";
+  const artistTab = tabSpec?.kind === "artist";
+  $("bannerLabel").textContent = artistTab ? "this artist" : reloaded ? "this page has new releases" : "this page";
+  $("loadBtn").textContent = artistTab ? "play all releases" : reloaded ? "update list" : "play this page";
   $<HTMLButtonElement>("loadBtn").disabled = state.loading;
   $("notice").hidden = state.notice !== "login";
   $("empty").hidden = !!state.source || !!tabSpec;
@@ -141,18 +149,37 @@ function render(): void {
     setWishState(relWish, rel.wishlisted, rel.owned, "release");
     relWish.querySelector(".label")!.textContent = rel.owned ? "In your collection" : rel.wishlisted ? "In Wishlist" : "Wishlist";
     setWishState($<HTMLButtonElement>("trackWish"), cur.track.wishlisted, false, "track");
+    const lyricsBtn = $("lyricsBtn");
+    lyricsBtn.hidden = !cur.track.hasLyrics;
+    lyricsBtn.classList.toggle("on", !!lyricsView?.follow);
   }
 
   $("playBtn").classList.toggle("playing", !!cur && !state.paused);
-  document.querySelectorAll<HTMLElement>(".tab").forEach((t) => t.classList.toggle("active", t.dataset.mode === state!.mode));
+  document
+    .querySelectorAll<HTMLButtonElement>(".tab[data-mode]")
+    .forEach((t) => t.classList.toggle("active", !recsView && t.dataset.mode === state!.mode));
+  // Recommendations always play whole releases.
+  const trackTab = document.querySelector<HTMLButtonElement>('.tab[data-mode="track"]')!;
+  trackTab.disabled = state.source?.kind === "recs";
+  trackTab.title = trackTab.disabled ? "recommendations always play whole releases" : "";
+  $("recsTab").hidden = !recsView && !cur?.release.hasRecs;
+  $("recsTab").classList.toggle("active", !!recsView);
+  $("alsoLikeBtn").hidden = !cur?.release.hasRecs;
   $<HTMLInputElement>("shuffle").checked = state.shuffle;
+  $<HTMLInputElement>("repeat").checked = state.repeat;
+  $("repeatToggle").hidden = state.mode !== "album"; // looping a release only makes sense when playing it in full
 
   const status = $("status");
   status.hidden = !state.error && !(state.loading && !state.queue.length);
   status.classList.toggle("error", !!state.error);
   status.textContent = state.error || "loading releases…";
 
-  $("count").textContent = state.queue.length ? `${state.queue.length} releases${state.hasMore ? "" : " · end of results"}` : "";
+  const artist = state.source?.kind === "artist";
+  const n = state.queue.length;
+  $("count").textContent = n ? `${n} ${n === 1 ? "release" : "releases"}${artist || state.hasMore ? "" : " · end of results"}` : "";
+  const sort = $("sortBtn");
+  sort.hidden = !artist || state.shuffle; // shuffled, the order does not matter
+  sort.textContent = state.artistOrder === "oldest" ? "oldest first ⇅" : "newest first ⇅";
   const more = $<HTMLButtonElement>("moreBtn");
   more.hidden = !state.hasMore;
   more.disabled = state.loading;
@@ -160,6 +187,20 @@ function render(): void {
 
   renderTime();
   renderQueue();
+  renderLyrics();
+  renderRecs();
+  maybeAutoLoad();
+}
+
+/** Loads the next page when the queue is scrolled near its end. */
+function maybeAutoLoad(): void {
+  const list = $("queue");
+  // Hidden behind the lyrics the list has no height and would look scrolled to its end.
+  if (!state?.source || list.hidden || autoLoadSent || !shouldAutoLoad(state, list)) return;
+  autoLoadSent = true;
+  send({ cmd: "loadMore" })
+    .catch(() => {}) // the player reports errors in its state
+    .finally(() => (autoLoadSent = false));
 }
 
 function renderTime(): void {
@@ -235,9 +276,19 @@ function renderQueue(): void {
       const subList = el("ol", "subtracks");
       for (const t of tracks) {
         const sub = el("li", "subtrack" + (t.id === cur!.track.id ? " current" : ""));
+        const lyricsLink = el("span");
+        if (t.hasLyrics) {
+          lyricsLink.className = "link lyrics-link" + (lyricsView && !lyricsView.follow && lyricsView.trackId === t.id ? " on" : "");
+          lyricsLink.textContent = "lyrics";
+          lyricsLink.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleLyrics({ itemIndex: q.index, trackId: t.id, title: t.title, follow: false });
+          });
+        }
         sub.append(
           el("span", "num", `${t.num}.`),
           el("span", "name", t.title),
+          lyricsLink,
           el("span", "time", fmt(t.duration)),
           wishButton(t.wishlisted, false, "track", q.index, t.id),
         );
@@ -250,6 +301,122 @@ function renderQueue(): void {
   });
 
   if (currentRow) revealInList(list, currentRow, firstRender);
+}
+
+// ---------- lyrics ----------
+
+function toggleLyrics(v: NonNullable<typeof lyricsView>): void {
+  const same = lyricsView && lyricsView.follow === v.follow && (v.follow || lyricsView.trackId === v.trackId);
+  lyricsView = same ? null : v;
+  if (lyricsView) recsView = null;
+  queueKey = ""; // redraw the lyrics links' state
+  render();
+}
+
+/** Shows the lyrics in place of the queue, fetching them from the player when the track changes. */
+function renderLyrics(): void {
+  const s = state!;
+  const cur = s.current;
+  if (lyricsView?.follow && cur && (cur.itemIndex !== lyricsView.itemIndex || cur.track.id !== lyricsView.trackId)) {
+    lyricsView = { itemIndex: cur.itemIndex, trackId: cur.track.id, title: cur.track.title, follow: true };
+  }
+  const open = !!lyricsView && !!s.source;
+  $("lyricsView").hidden = !open;
+  $("queue").hidden = open || !!recsView;
+  if (open) $("foot").hidden = true;
+  if (!open) {
+    lyricsShown = "";
+    return;
+  }
+
+  const v = lyricsView!;
+  const key = `${v.itemIndex}:${v.trackId}`;
+  $("lyricsTitle").textContent = v.title;
+  if (key === lyricsShown) return;
+  lyricsShown = key;
+  const box = $("lyricsText");
+  const show = (text: string, muted = false) => {
+    if (lyricsShown !== key) return; // the view moved on while this was loading
+    box.textContent = text;
+    box.classList.toggle("muted", muted);
+  };
+  show("loading lyrics…", true);
+  $("lyricsView").scrollTop = 0;
+  // A failure stays on screen; closing and reopening the lyrics tries again.
+  send<LyricsResult>({ cmd: "getLyrics", itemIndex: v.itemIndex, trackId: v.trackId }).then(
+    (r) => ("error" in r ? show(r.error, true) : show(r.text ?? "No lyrics for this track.", !r.text)),
+    (e: unknown) => show(e instanceof Error ? e.message : String(e), true),
+  );
+}
+
+// ---------- you may also like ----------
+
+/** Opens the recommendations of the playing release, or closes them. */
+function openRecs(): void {
+  const rel = state?.current?.release;
+  recsView = rel?.hasRecs ? { url: rel.url, release: rel.title } : null;
+  recsShown = ""; // an explicit open always (re)loads
+  lyricsView = null;
+  render();
+}
+
+function renderRecs(): void {
+  const s = state!;
+  const open = !!recsView && !!s.source;
+  $("recsView").hidden = !open;
+  if (!open) {
+    recsShown = "";
+    return;
+  }
+  $("queue").hidden = true;
+  $("foot").hidden = true;
+  const v = recsView!;
+  const rel = s.current?.release;
+  $("recsRefresh").hidden = !rel?.hasRecs || rel.url === v.url;
+  $("recsFor").textContent = `recommended on ${v.release}`;
+  if (recsShown === v.url) return;
+  recsShown = v.url;
+
+  const list = $("recsList");
+  const status = $("recsStatus");
+  list.textContent = "";
+  $("recsTitle").textContent = "You may also like";
+  status.textContent = "loading recommendations…";
+  send<RecsResult>({ cmd: "getRecs", url: v.url }).then(
+    (r) => {
+      if (recsShown !== v.url) return; // switched to another release meanwhile
+      if ("error" in r) {
+        status.textContent = r.error; // stays until the user opens the recommendations again
+        return;
+      }
+      if (r.title) $("recsTitle").textContent = r.title;
+      status.textContent = r.items.length ? "" : "Bandcamp recommends nothing for this release.";
+      r.items.forEach((it, i) => {
+        const row = el("div", "row");
+        row.append(el("span", "play-col"));
+        const img = el("img", "thumb-col");
+        img.loading = "lazy";
+        img.alt = "";
+        if (it.thumb) img.src = it.thumb;
+        row.append(img);
+        const title = el("span", "title-col");
+        title.append(el("span", "t", it.title), el("span", "a", `by ${it.artist}`));
+        row.append(title);
+        row.title = "play these recommendations, starting here";
+        row.addEventListener("click", () => {
+          recsView = null;
+          send({ cmd: "playRecs", url: v.url, index: i }).catch(() => {});
+          render();
+        });
+        const li = el("li");
+        li.append(row);
+        list.append(li);
+      });
+    },
+    (e: unknown) => {
+      if (recsShown === v.url) status.textContent = e instanceof Error ? e.message : String(e);
+    },
+  );
 }
 
 /** Scrolls only the queue (scrollIntoView would also scroll the whole popup and hide its header). */
@@ -267,17 +434,36 @@ $("playBtn").addEventListener("click", () => void send({ cmd: "togglePlay" }));
 $("nextBtn").addEventListener("click", () => void send({ cmd: "next" }));
 $("prevBtn").addEventListener("click", () => void send({ cmd: "prev" }));
 $("moreBtn").addEventListener("click", () => void send({ cmd: "loadMore" }));
+$("sortBtn").addEventListener("click", () => {
+  if (state) void send({ cmd: "setArtistOrder", order: state.artistOrder === "oldest" ? "newest" : "oldest" });
+});
+$("queue").addEventListener("scroll", maybeAutoLoad, { passive: true });
 $("noticeClose").addEventListener("click", () => void send({ cmd: "dismissNotice" }));
 $("relWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex);
 });
+$("lyricsBtn").addEventListener("click", () => {
+  const cur = state?.current;
+  if (cur) toggleLyrics({ itemIndex: cur.itemIndex, trackId: cur.track.id, title: cur.track.title, follow: true });
+});
+$("lyricsBack").addEventListener("click", () => toggleLyrics(lyricsView!));
 $("trackWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex, state.current.track.id);
 });
+$<HTMLInputElement>("repeat").addEventListener("change", (e) => void send({ cmd: "setRepeat", on: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>("shuffle").addEventListener("change", (e) => void send({ cmd: "setShuffle", on: (e.target as HTMLInputElement).checked }));
-document.querySelectorAll<HTMLElement>(".tab").forEach((t) =>
-  t.addEventListener("click", () => void send({ cmd: "setMode", mode: t.dataset.mode === "album" ? "album" : "track" })),
+document.querySelectorAll<HTMLElement>(".tab[data-mode]").forEach((t) =>
+  t.addEventListener("click", () => {
+    recsView = null; // the mode tabs show the queue
+    render();
+    void send({ cmd: "setMode", mode: t.dataset.mode === "album" ? "album" : "track" });
+  }),
 );
+$("recsTab").addEventListener("click", () => {
+  if (!recsView) openRecs();
+});
+$("alsoLikeBtn").addEventListener("click", openRecs);
+$("recsRefresh").addEventListener("click", openRecs);
 
 $("loadBtn").addEventListener("click", () => {
   if (activeTabId == null) return;
@@ -319,7 +505,8 @@ document.addEventListener("keydown", (e) => {
 
 async function inspectActiveTab(): Promise<void> {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id != null && /^https?:\/\/bandcamp\.com\/discover/.test(tab.url || "")) {
+  // Discover pages on bandcamp.com, or an artist's / label's own <name>.bandcamp.com pages.
+  if (tab?.id != null && /^https?:\/\/(bandcamp\.com\/discover|[^/]+\.bandcamp\.com\/)/.test(tab.url || "")) {
     activeTabId = tab.id;
     tabSpec = await send<TabSpec | null>({ cmd: "inspectTab", tabId: tab.id }).catch(() => null);
   }

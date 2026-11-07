@@ -1,7 +1,7 @@
 // Bandcamp endpoints and conversions from their JSON to our own shapes.
 // These are Bandcamp's internal APIs (the ones its own pages use), not a public API.
 
-import type { DiscoverResult, Item, Track } from "./types";
+import type { ArtistOrder, DiscoverResult, Item, Track } from "./types";
 
 export const API = "https://bandcamp.com/api";
 export const DISCOVER_PATH = "/api/discover/1/discover_web";
@@ -68,12 +68,71 @@ export function toItem(r: DiscoverResult): Item {
   };
 }
 
+export const BAND_DETAILS_URL = `${API}/mobile/25/band_details`;
+
+export interface BandDetails {
+  discography?: {
+    item_id: number;
+    item_type: "album" | "track" | string;
+    title: string;
+    artist_name?: string | null;
+    band_name: string;
+    band_id: number;
+    art_id?: number | null;
+    /** "30 Oct 2026 00:00:00 GMT" */
+    release_date?: string | null;
+  }[];
+}
+
+/**
+ * An artist's (or label's) releases from band_details. It lacks links, track
+ * counts and featured tracks; those come with each release's tracklist.
+ */
+export function toArtistItems(data: BandDetails, bandUrl: string): Item[] {
+  return (data.discography || []).map((d) => {
+    const released = d.release_date ? Date.parse(d.release_date) : NaN;
+    return {
+      id: d.item_id,
+      type: d.item_type === "track" ? "t" : "a",
+      title: d.title,
+      artist: d.artist_name || d.band_name,
+      bandId: d.band_id,
+      url: bandUrl,
+      artId: d.art_id || null,
+      trackCount: 0,
+      wishlisted: false,
+      owned: false,
+      year: releaseYear(d.release_date),
+      released: Number.isFinite(released) ? released : null,
+      featured: null,
+      tracks: null,
+    };
+  });
+}
+
+/** Item indices sorted by release date; undated releases go last. */
+export function byReleaseDate(items: Item[], order: ArtistOrder): number[] {
+  const dir = order === "oldest" ? 1 : -1;
+  return items
+    .map((it, i) => ({ i, t: it.released ?? null }))
+    .sort((a, b) => {
+      if (a.t === b.t) return a.i - b.i;
+      if (a.t === null) return 1;
+      if (b.t === null) return -1;
+      return (a.t - b.t) * dir || a.i - b.i;
+    })
+    .map((x) => x.i);
+}
+
 export function tralbumDetailsUrl(item: Pick<Item, "bandId" | "id" | "type">): string {
   return `${API}/mobile/25/tralbum_details?band_id=${item.bandId}&tralbum_id=${item.id}&tralbum_type=${item.type}`;
 }
 
 export interface TralbumDetails {
   tralbum_artist?: string;
+  /** The release's page. */
+  bandcamp_url?: string;
+  featured_track_id?: number;
   /** Unix seconds. */
   release_date?: number;
   tracks?: {
@@ -84,6 +143,8 @@ export interface TralbumDetails {
     duration: number;
     is_streamable?: boolean;
     streaming_url?: Record<string, string> | null;
+    has_lyrics?: boolean;
+    track_url?: string;
   }[];
 }
 
@@ -92,6 +153,113 @@ export function toTracks(data: TralbumDetails): Track[] {
   return (data.tracks || []).flatMap((t) => {
     const stream = t.is_streamable ? t.streaming_url?.["mp3-128"] : undefined;
     if (!stream) return [];
-    return [{ id: t.track_id, num: t.track_num, title: t.title, artist: t.band_name || data.tralbum_artist, stream, duration: t.duration }];
+    return [
+      {
+        id: t.track_id,
+        num: t.track_num,
+        title: t.title,
+        artist: t.band_name || data.tralbum_artist,
+        stream,
+        duration: t.duration,
+        hasLyrics: !!t.has_lyrics,
+        url: t.track_url,
+      },
+    ];
   });
+}
+
+/**
+ * True for pages on bandcamp.com and its artist subdomains: the only pages the extension
+ * can fetch (lyrics, recommendations). Artists' custom domains are out of reach.
+ */
+export function isBandcampPage(url: string | undefined): url is string {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && (u.hostname === "bandcamp.com" || u.hostname.endsWith(".bandcamp.com"));
+  } catch {
+    return false;
+  }
+}
+
+const ENTITIES: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt: ">", apos: "'", "#39": "'" };
+const decodeEntities = (s: string) =>
+  s.replace(/&(quot|amp|lt|gt|apos|#39|#x[0-9a-f]+|#\d+);/gi, (m, e: string) => {
+    if (e[0] === "#") return String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1)));
+    return ENTITIES[e.toLowerCase()] ?? m;
+  });
+
+/** The "If you like …, you may also like" section of a release page. */
+export interface Recommendations {
+  /** "If you like DICKWEED, you may also like:" */
+  title: string | null;
+  items: Item[];
+}
+
+const attrOf = (attrs: string, name: string) => {
+  const m = new RegExp(`\\b${name}="([^"]*)"`).exec(attrs);
+  return m ? decodeEntities(m[1]!) : null;
+};
+
+/**
+ * Recommendations from the HTML of an album or track page. Bandcamp renders them
+ * server-side as li.recommended-album with data-* attributes; parsed as text, without a DOM.
+ */
+export function parseRecommendations(html: string): Recommendations {
+  const titleMatch = /class="section-title"[^>]*>([\s\S]*?)<\//.exec(html);
+  const title = titleMatch ? decodeEntities(titleMatch[1]!.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim() || null : null;
+  const items: Item[] = [];
+  const re = /<li\s+class="recommended-album[^"]*"([^>]*)>([\s\S]*?)<\/li>/g;
+  for (let m; (m = re.exec(html)); ) {
+    const [, attrs, body] = m as unknown as [string, string, string];
+    const id = Number(attrOf(attrs, "data-albumid"));
+    const bandId = Number(attrOf(attrs, "data-artistid"));
+    const href = /<a\b[^>]*href="([^"]*)"/.exec(body);
+    const url = href ? decodeEntities(href[1]!).replace(/\?.*$/, "") : "";
+    if (!id || !bandId || !isBandcampPage(url)) continue;
+    const art = /\/img\/a(\d+)_/.exec(body);
+    items.push({
+      id,
+      type: url.includes("/track/") ? "t" : "a",
+      title: attrOf(attrs, "data-albumtitle") || "",
+      artist: attrOf(attrs, "data-artist") || "",
+      bandId,
+      url,
+      artId: art ? Number(art[1]) : null,
+      trackCount: 0,
+      wishlisted: false,
+      owned: false,
+      year: null,
+      featured: null,
+      tracks: null,
+    });
+  }
+  return { title, items };
+}
+
+/**
+ * Lyrics text from a Bandcamp track page: its ld+json (recordingOf.lyrics.text),
+ * or else the data-tralbum attribute (trackinfo[0].lyrics). Plain string parsing,
+ * so it works without a DOM.
+ */
+export function parseLyrics(html: string): string | null {
+  const clean = (t: unknown) => (typeof t === "string" && t.trim() ? t.replace(/\r\n?/g, "\n").trim() : null);
+  const ld = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/i.exec(html);
+  if (ld) {
+    try {
+      const text = clean(JSON.parse(ld[1]!)?.recordingOf?.lyrics?.text);
+      if (text) return text;
+    } catch {
+      // fall back to data-tralbum
+    }
+  }
+  const attr = /data-tralbum="([^"]*)"/.exec(html);
+  if (attr) {
+    try {
+      return clean(JSON.parse(decodeEntities(attr[1]!))?.trackinfo?.[0]?.lyrics);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }

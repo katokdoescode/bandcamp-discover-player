@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { OWN_MARK } from "@/lib/bandcamp";
 import { Player } from "@/lib/player";
-import { capture, defaultApi, result, setup } from "./fixtures";
+import { ARTIST, artistApi, capture, defaultApi, disco, recsPage, result, setup, trackPage, trackUrl } from "./fixtures";
 
 const TAB = 7;
 const playing = (audio: { src: string }) => audio.src;
@@ -56,9 +56,9 @@ describe("loading a discover page", () => {
     expect(view().current!.release.year).toBe(2024);
   });
 
-  it("refuses pages that aren't discover pages", async () => {
+  it("refuses pages that are neither discover nor artist pages", async () => {
     const { player } = await setup({ spec: null });
-    await expect(player.handle({ cmd: "loadFromTab", tabId: TAB })).rejects.toThrow("not a Bandcamp discover page");
+    await expect(player.handle({ cmd: "loadFromTab", tabId: TAB })).rejects.toThrow("not a Bandcamp discover or artist page");
   });
 
   it("reports the tab's filters and which list it shows", async () => {
@@ -171,6 +171,214 @@ describe("full releases", () => {
     const { player, settings } = await setup();
     await player.handle({ cmd: "setMode", mode: "album" });
     expect(settings.mode).toBe("album");
+  });
+});
+
+describe("repeat release (beta)", () => {
+  async function albumWithRepeat() {
+    const ctx = await setup({ capture: capture([1, 2]) });
+    await ctx.player.handle({ cmd: "setMode", mode: "album" });
+    await ctx.player.handle({ cmd: "setRepeat", on: true });
+    await ctx.player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await ctx.player.handle({ cmd: "playTrack", itemIndex: 0, trackId: 12 });
+    return ctx;
+  }
+
+  it("loops back to the first track when the release's last track ends", async () => {
+    const { audio, view } = await albumWithRepeat();
+    audio.fire("ended");
+    await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/10?fresh=0"));
+    expect(view().repeat).toBe(true);
+  });
+
+  it("moves on through the tracks before the last one as usual", async () => {
+    const { player, audio } = await albumWithRepeat();
+    await player.handle({ cmd: "playTrack", itemIndex: 0, trackId: 10 });
+    audio.fire("ended");
+    await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/11?fresh=0"));
+  });
+
+  it("lets next leave the loop for the next release", async () => {
+    const { player, audio } = await albumWithRepeat();
+    await player.handle({ cmd: "next" });
+    expect(playing(audio)).toBe("https://stream/20?fresh=0");
+  });
+
+  it("has no effect in one track per release mode", async () => {
+    const { player, audio } = await setup({ capture: capture([1, 2]) });
+    await player.handle({ cmd: "setRepeat", on: true });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    audio.fire("ended");
+    await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/20"));
+  });
+
+  it("is remembered between sessions", async () => {
+    const { player, settings } = await setup();
+    await player.handle({ cmd: "setRepeat", on: true });
+    expect(settings.repeat).toBe(true);
+    const next = await setup({ settings: { repeat: true } });
+    expect(next.view().repeat).toBe(true);
+  });
+});
+
+describe("lyrics", () => {
+  const pages = { [trackUrl(11)]: trackPage("line one\nline two") };
+
+  it("loads a track's lyrics from its page once", async () => {
+    const { player, pageCalls } = await setup({ capture: capture([1]), lyrics: [11], pages });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await expect(player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 11 })).resolves.toEqual({ text: "line one\nline two" });
+    await player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 11 });
+    expect(pageCalls).toEqual([trackUrl(11)]);
+  });
+
+  it("does not ask for tracks without lyrics", async () => {
+    const { player, pageCalls } = await setup({ capture: capture([1]), lyrics: [11], pages });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await expect(player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 10 })).resolves.toEqual({ text: null });
+    expect(pageCalls).toEqual([]);
+  });
+
+  it("reports a page that could not be loaded, and tries again next time", async () => {
+    const { player, pageCalls, view } = await setup({ capture: capture([1]), lyrics: [11], pages: {} });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await expect(player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 11 })).resolves.toEqual({ error: expect.stringContaining("Could not load the lyrics") });
+    expect(view().error).toBeNull(); // not the player's error line
+    await player.handle({ cmd: "getLyrics", itemIndex: 0, trackId: 11 });
+    expect(pageCalls).toHaveLength(2);
+  });
+
+  it("learns whether the featured track has lyrics from the release's tracklist", async () => {
+    const c = capture([1]);
+    c.results[0]!.featured_track!.id = 11;
+    const { player, view } = await setup({ capture: c, lyrics: [11], pages });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.track.hasLyrics).toBe(true));
+  });
+
+  it("marks the tracks with lyrics in a release played in full", async () => {
+    const { player, view } = await setup({ capture: capture([1]), lyrics: [11], pages });
+    await player.handle({ cmd: "setMode", mode: "album" });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().current!.release.tracks!.map((t) => t.hasLyrics)).toEqual([false, true, false]);
+  });
+});
+
+describe("an artist's releases", () => {
+  const discography = [
+    disco(1, "05 Mar 2021 00:00:00 GMT"),
+    disco(2, "30 Oct 2026 00:00:00 GMT"),
+    disco(3, null),
+    disco(4, "16 Mar 2019 00:00:00 GMT", { item_type: "track", artist_name: "Guest" }),
+  ];
+  const artistSetup = (o: Parameters<typeof setup>[0] = {}) => setup({ spec: null, artist: ARTIST, api: artistApi(discography), ...o });
+
+  it("plays the whole discography, newest first, undated last", async () => {
+    const { player, view, audio } = await artistSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().source).toMatchObject({ kind: "artist", label: "Some Band", pageUrl: ARTIST.pageUrl });
+    expect(view().queue.map((q) => q.title)).toEqual(["Release 2", "Release 1", "Release 4", "Release 3"]);
+    expect(view().queue[2]).toMatchObject({ artist: "Guest", year: 2019 });
+    // Featured track and the release's own link come with its tracklist.
+    await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/21?fresh=0"));
+    expect(view().current!.release.url).toBe("https://someband.bandcamp.com/album/r2");
+    expect(view().hasMore).toBe(false);
+  });
+
+  it("can play oldest first, and re-sorts without interrupting the current track", async () => {
+    const { player, view, audio, settings } = await artistSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "next" }); // Release 1
+    const before = playing(audio);
+    await player.handle({ cmd: "setArtistOrder", order: "oldest" });
+    expect(settings.artistOrder).toBe("oldest");
+    expect(view().queue.map((q) => q.title)).toEqual(["Release 4", "Release 1", "Release 2", "Release 3"]);
+    expect(playing(audio)).toBe(before);
+    await player.handle({ cmd: "next" });
+    expect(view().current!.release.title).toBe("Release 2");
+  });
+
+  it("starts with the saved order", async () => {
+    const { player, view } = await artistSetup({ settings: { artistOrder: "oldest" } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().queue[0]!.title).toBe("Release 4");
+  });
+
+  it("never asks discover for more", async () => {
+    const { player, apiCalls } = await artistSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "loadMore" });
+    for (let i = 0; i < 4; i++) await player.handle({ cmd: "next" });
+    expect(apiCalls.some((c) => c.url.includes("discover_web"))).toBe(false);
+  });
+
+  it("goes back to date order when shuffle is turned off", async () => {
+    const { player, view } = await artistSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "setShuffle", on: true });
+    await player.handle({ cmd: "setShuffle", on: false });
+    expect(view().queue.map((q) => q.title)).toEqual(["Release 2", "Release 1", "Release 4", "Release 3"]);
+    expect(view().pos).toBe(0);
+  });
+
+  it("is offered on artist pages", async () => {
+    const { player } = await artistSetup();
+    await expect(player.handle({ cmd: "inspectTab", tabId: TAB })).resolves.toMatchObject({ kind: "artist", label: "Some Band", sig: null });
+  });
+});
+
+describe("you may also like", () => {
+  const REL = "https://band1.bandcamp.com/album/r1";
+  const recsSetup = (o: Parameters<typeof setup>[0] = {}) =>
+    setup({ capture: capture([1, 2]), pages: { [REL]: recsPage([3, 4, 5]) }, ...o });
+
+  it("offers the playing release's recommendations", async () => {
+    const { player, view, pageCalls } = await recsSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().current!.release.hasRecs).toBe(true);
+    const r = (await player.handle({ cmd: "getRecs", url: REL })) as any;
+    expect(r.title).toBe("If you like DICKWEED, you may also like:");
+    expect(r.items.map((i: any) => i.title)).toEqual(["Release 3 & Friends", "Release 4 & Friends", "Release 5 & Friends"]);
+    await player.handle({ cmd: "getRecs", url: REL });
+    expect(pageCalls).toEqual([REL]); // cached
+  });
+
+  it("plays them in full, from the chosen one, whatever the saved mode", async () => {
+    const { player, view, audio, settings } = await recsSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "playRecs", url: REL, index: 1 });
+    expect(view().source).toMatchObject({ kind: "recs", label: "like Release 1", pageUrl: REL });
+    expect(view().mode).toBe("album");
+    expect(settings.mode).toBeUndefined(); // the user's own mode is untouched
+    expect(playing(audio)).toBe("https://stream/40?fresh=0");
+    await player.handle({ cmd: "next" });
+    expect(playing(audio)).toBe("https://stream/41?fresh=0");
+    expect(view().queue.map((q) => q.title)).toEqual(["Release 3 & Friends", "Release 4 & Friends", "Release 5 & Friends"]);
+  });
+
+  it("never asks discover for more", async () => {
+    const { player, apiCalls, view } = await recsSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    const before = apiCalls.filter((c) => c.url.includes("discover_web")).length;
+    await player.handle({ cmd: "playRecs", url: REL, index: 2 });
+    await player.handle({ cmd: "loadMore" });
+    expect(apiCalls.filter((c) => c.url.includes("discover_web")).length).toBe(before);
+    expect(view().hasMore).toBe(false);
+  });
+
+  it("goes back to the saved mode for the next discover list", async () => {
+    const { player, view } = await recsSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "playRecs", url: REL, index: 0 });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().mode).toBe("track");
+  });
+
+  it("reports a page that could not be loaded without touching the player's error line", async () => {
+    const { player, view } = await recsSetup({ pages: {} });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await expect(player.handle({ cmd: "getRecs", url: REL })).resolves.toEqual({ error: expect.stringContaining("Could not load") });
+    expect(view().error).toBeNull();
   });
 });
 

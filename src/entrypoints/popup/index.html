@@ -29,7 +29,8 @@
 
   <section class="empty" id="empty" hidden>
     <p>Open a genre on <a href="https://bandcamp.com/discover" target="_blank">bandcamp.com/discover</a>,
-      then click the extension icon and hit <b>play this page</b>.</p>
+      then click the extension icon and hit <b>play this page</b>. On an artist's page, <b>play all releases</b>
+      plays their whole discography.</p>
   </section>
 
   <section class="now" id="now" hidden>
@@ -37,8 +38,9 @@
       <a id="artLink" target="_blank"><img class="art" id="art" alt=""></a>
       <div class="now-meta">
         <h2 class="trackTitle" id="relTitle"></h2>
-        <h3>by <a id="relArtist" target="_blank"></a><span class="year" id="relYear"></span></h3>
+        <h3>by <a id="relArtist" target="_blank"></a><span class="year" id="relYear"></span><label class="toggle repeat" id="repeatToggle" title="repeat this release (beta)"><input type="checkbox" id="repeat"><span class="icon repeat-icon"></span></label></h3>
         <button class="wishlist-link" id="relWish"><span class="wish-icon"></span><span class="label">Wishlist</span></button>
+        <button class="link also-like" id="alsoLikeBtn" hidden>You may also like ›</button>
       </div>
     </div>
 
@@ -48,6 +50,7 @@
         <div class="info_line">
           <span class="title" id="trackTitle"></span>
           <button class="wish" id="trackWish"></button>
+          <button class="link lyrics-link" id="lyricsBtn" hidden>lyrics</button>
           <span class="time"><span id="timeElapsed">00:00</span> / <span id="timeTotal">00:00</span></span>
         </div>
         <div class="progress_row">
@@ -66,20 +69,42 @@
     <div class="tabs" role="tablist">
       <button class="tab" data-mode="track" role="tab">one track per release</button>
       <button class="tab" data-mode="album" role="tab">full releases</button>
+      <button class="tab" id="recsTab" role="tab" hidden>you may also like</button>
     </div>
-    <label class="shuffle" title="shuffle releases">
-      <input type="checkbox" id="shuffle">
-      <span class="shuffle-icon"></span>shuffle
-    </label>
+    <div class="toggles">
+      <label class="toggle shuffle" title="shuffle releases">
+        <input type="checkbox" id="shuffle">
+        <span class="icon shuffle-icon"></span><span class="label">shuffle</span>
+      </label>
+    </div>
   </nav>
 
   <div class="status" id="status" hidden></div>
 
   <ol class="track_list" id="queue"></ol>
 
+  <section class="lyrics" id="lyricsView" hidden>
+    <div class="lyrics-head">
+      <h4 id="lyricsTitle"></h4>
+      <button class="link" id="lyricsBack">back to list</button>
+    </div>
+    <div class="lyrics-text" id="lyricsText"></div>
+  </section>
+
+  <section class="recs" id="recsView" hidden>
+    <div class="recs-head">
+      <h4 id="recsTitle"></h4>
+      <button class="link" id="recsRefresh" hidden title="show recommendations for the release that is playing now">refresh</button>
+    </div>
+    <div class="recs-for" id="recsFor"></div>
+    <div class="recs-status" id="recsStatus"></div>
+    <ol class="track_list recs-list" id="recsList"></ol>
+  </section>
+
   <footer class="queue-foot" id="foot" hidden>
     <span id="count"></span>
     <button class="link" id="moreBtn">load more</button>
+    <button class="link sort" id="sortBtn" hidden title="change the order of releases"></button>
   </footer>
 
   <script type="module" src="./main.ts"></script>
