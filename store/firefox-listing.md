@@ -63,7 +63,7 @@ Use the text of [PRIVACY.md](../PRIVACY.md).
 
 ## Compatibility
 
-Firefox for desktop only. Firefox for Android is not tested yet.
+Firefox for desktop and Firefox for Android (the popup opens full screen there).
 
 ## Notes to reviewer
 
@@ -81,6 +81,10 @@ Permissions:
 The content script on bandcamp.com uses `content.fetch` to make same-origin requests as the page (release tracklists, and wishlist add/remove, which only happens when the user clicks a heart). On artists' own `<name>.bandcamp.com` pages the same content script only reads the band id from the page's `data-band` attribute, when the popup asks. The background page fetches Bandcamp track pages (`*.bandcamp.com/track/…`) to read their lyrics, and release pages to read their "you may also like" section, when the user opens them, and calls `bandcamp.com/api/mobile/25/band_details` for an artist's discography. No remote code is loaded or executed; no data is sent anywhere except to Bandcamp.
 
 ## Release notes
+
+### 1.0.1
+
+The player fits phone screens in Firefox for Android, and you can seek by dragging with a finger.
 
 ### 1.0.0
 
