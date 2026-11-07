@@ -1,7 +1,7 @@
 import { browser, type Browser } from "wxt/browser";
 import { request } from "@/lib/messaging";
 import type { LyricsResult, PageSpec, PlayerCommand, PlayerEvent, PublicState, RecsResult } from "@/lib/types";
-import { formatTime as fmt, shouldAutoLoad } from "@/lib/util";
+import { buyLabel, buyTitle, formatTime as fmt, shouldAutoLoad } from "@/lib/util";
 
 type TabSpec = PageSpec & { sig: string | null };
 type Reply = { type: "reply"; reqId: number; result?: unknown; error?: string };
@@ -149,6 +149,30 @@ function render(): void {
     setWishState(relWish, rel.wishlisted, rel.owned, "release");
     relWish.querySelector(".label")!.textContent = rel.owned ? "In your collection" : rel.wishlisted ? "In Wishlist" : "Wishlist";
     setWishState($<HTMLButtonElement>("trackWish"), cur.track.wishlisted, false, "track");
+
+    // Buying happens on Bandcamp: the links open the release or track page.
+    const buyLink = $<HTMLAnchorElement>("buyLink");
+    buyLink.hidden = !rel.buy;
+    if (rel.buy) {
+      buyLink.textContent = buyLabel(rel.buy);
+      buyLink.title = buyTitle(rel.buy);
+      buyLink.href = rel.url;
+    }
+    const trackBuy = $<HTMLAnchorElement>("trackBuyLink");
+    trackBuy.hidden = !rel.trackBuy;
+    if (rel.trackBuy) {
+      trackBuy.textContent = buyLabel(rel.trackBuy);
+      trackBuy.title = `Buy “${cur.track.title}” on its own`;
+      trackBuy.href = rel.trackBuy.url;
+    }
+    $("nudge").hidden = !rel.nudge;
+    if (rel.nudge) {
+      $("nudgeText").textContent = rel.nudge.free
+        ? `You've played this ${rel.nudge.plays} times. It's a free download from ${rel.artist}.`
+        : `You've played this ${rel.nudge.plays} times. Buy it to support ${rel.artist}.`;
+      $("nudgeBuy").textContent = rel.nudge.free ? "download" : "buy";
+      $<HTMLAnchorElement>("nudgeBuy").href = rel.nudge.url;
+    }
     const lyricsBtn = $("lyricsBtn");
     lyricsBtn.hidden = !cur.track.hasLyrics;
     lyricsBtn.classList.toggle("on", !!lyricsView?.follow);
@@ -263,7 +287,9 @@ function renderQueue(): void {
     title.append(el("span", "a", s.mode === "track" && q.featured ? `${q.artist} — “${q.featured}”` : `by ${q.artist}`));
     row.append(title);
 
-    const time = s.mode === "album" ? `${q.trackCount} ${q.trackCount === 1 ? "track" : "tracks"}` : q.duration ? fmt(q.duration) : "";
+    // 0 means not known yet: an artist's releases get their count when their tracklist loads.
+    const count = q.trackCount ? `${q.trackCount} ${q.trackCount === 1 ? "track" : "tracks"}` : "";
+    const time = s.mode === "album" ? count : q.duration ? fmt(q.duration) : "";
     const timeCol = el("span", "time", time);
     if (q.year) timeCol.append(el("span", "year", String(q.year)));
     row.append(timeCol);
@@ -286,7 +312,7 @@ function renderQueue(): void {
           });
         }
         sub.append(
-          el("span", "num", `${t.num}.`),
+          el("span", "num", t.num ? `${t.num}.` : ""),
           el("span", "name", t.title),
           lyricsLink,
           el("span", "time", fmt(t.duration)),
@@ -439,6 +465,7 @@ $("sortBtn").addEventListener("click", () => {
 });
 $("queue").addEventListener("scroll", maybeAutoLoad, { passive: true });
 $("noticeClose").addEventListener("click", () => void send({ cmd: "dismissNotice" }));
+$("nudgeClose").addEventListener("click", () => void send({ cmd: "dismissNudge" }));
 $("relWish").addEventListener("click", (e) => {
   if (state?.current) toggleWish(e.currentTarget as HTMLElement, state.current.itemIndex);
 });

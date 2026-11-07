@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { OWN_MARK } from "@/lib/bandcamp";
 import { Player } from "@/lib/player";
-import { ARTIST, artistApi, capture, defaultApi, disco, recsPage, result, setup, trackPage, trackUrl } from "./fixtures";
+import { ARTIST, artistApi, capture, defaultApi, details, disco, recsPage, result, setup, trackPage, trackUrl } from "./fixtures";
 
 const TAB = 7;
 const playing = (audio: { src: string }) => audio.src;
@@ -494,6 +494,27 @@ describe("wishlist", () => {
     ]);
   });
 
+  it("wishlists from an artist's page when no bandcamp.com tab is open", async () => {
+    const { player, view, wishTabs } = await setup({ capture: capture([1]), fanId: 42, tabs: [{ id: 9, active: true, artistPage: true }] });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "toggleWishlist", itemIndex: 0 });
+
+    expect(view().notice).toBeNull();
+    expect(view().queue[0]!.wishlisted).toBe(true);
+    expect(wishTabs).toEqual([9]);
+  });
+
+  it("prefers a bandcamp.com tab for the wishlist", async () => {
+    const tabs = [
+      { id: 9, active: true, artistPage: true },
+      { id: 7, active: false },
+    ];
+    const { player, wishTabs } = await setup({ capture: capture([1]), fanId: 42, tabs });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "toggleWishlist", itemIndex: 0 });
+    expect(wishTabs).toEqual([7]);
+  });
+
   it("wishlists single tracks as tracks", async () => {
     const { player, view, sent } = await setup({ capture: capture([1]), fanId: 42 });
     await player.handle({ cmd: "loadFromTab", tabId: TAB });
@@ -509,6 +530,71 @@ describe("wishlist", () => {
     const { player, view } = await setup({ capture: cap });
     await player.handle({ cmd: "loadFromTab", tabId: TAB });
     expect(view().queue[0]!.wishlisted).toBe(true);
+  });
+});
+
+describe("buying", () => {
+  /** tralbum_details of a release sold for $7 that allows `limit` full plays. */
+  const soldApi = (limit: number | null = 3) => {
+    const api = defaultApi();
+    return (url: string, body?: unknown) => {
+      const d = api(url) as Record<string, unknown> | undefined;
+      return d && "tracks" in d ? { ...d, is_purchasable: true, is_set_price: true, price: 7, currency: "USD", streaming_limit: limit } : d;
+    };
+  };
+
+  it("shows the price once the tracklist is in", async () => {
+    const { player, view } = await setup({ capture: capture([1]), api: soldApi() });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.buy).toMatchObject({ price: 7, currency: "USD" }));
+  });
+
+  it("asks to buy after the artist's limit of full plays, until closed", async () => {
+    const { player, audio, view, settings } = await setup({ capture: capture([1]), api: soldApi(), settings: { plays: { t10: 2 } } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.buy).toBeTruthy());
+    expect(view().current!.release.nudge).toBeNull();
+
+    // A track played to its end counts.
+    audio.fire("ended");
+    await vi.waitFor(() => expect(view().current!.release.nudge).toMatchObject({ plays: 3, free: false }));
+    expect(settings.plays).toEqual({ t10: 3 });
+
+    await player.handle({ cmd: "dismissNudge" });
+    expect(view().current!.release.nudge).toBeNull();
+    expect(settings.nudgeOff).toEqual(["a1"]);
+  });
+
+  it("uses Bandcamp's usual limit of 3 when the release has none", async () => {
+    const { player, view } = await setup({ capture: capture([1]), api: soldApi(null), settings: { plays: { t10: 3 } } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.nudge).toMatchObject({ plays: 3, free: false }));
+  });
+
+  it("offers a track of an album that is sold on its own", async () => {
+    const api = defaultApi();
+    const tracksOnly = (url: string) => {
+      const d = api(url) as ReturnType<typeof details> | undefined;
+      if (!d || !("tracks" in d)) return d;
+      Object.assign(d.tracks[0]!, { is_purchasable: true, is_set_price: true, price: 1, currency: "USD" });
+      return { ...d, is_purchasable: false };
+    };
+    const { player, view } = await setup({ capture: capture([1]), api: tracksOnly, settings: { plays: { t10: 3 } } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.tracks).toBeTruthy());
+
+    expect(view().current!.release.buy).toBeNull();
+    expect(view().current!.release.trackBuy).toMatchObject({ what: "track", price: 1, url: trackUrl(10) });
+    // Only the track can be bought, so the reminder points to it.
+    expect(view().current!.release.nudge).toEqual({ plays: 3, url: trackUrl(10), free: false });
+  });
+
+  it("doesn't ask for releases that can't be bought", async () => {
+    const { player, view } = await setup({ capture: capture([1]), settings: { plays: { t10: 9 } } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.tracks).toBeTruthy());
+    expect(view().current!.release.buy).toBeNull();
+    expect(view().current!.release.nudge).toBeNull();
   });
 });
 

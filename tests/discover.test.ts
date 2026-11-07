@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { artUrl, isBandcampPage, parseRecommendations, isPageDiscoverRequest, parseLyrics, normalizeResults, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
+import { artUrl, isBandcampPage, toArtistItems, parseRecommendations, isPageDiscoverRequest, parseLyrics, normalizeResults, releaseYear, toBuy, toItem, toTracks } from "@/lib/bandcamp";
 import { applyDiscoverResponse } from "@/lib/captures";
 import { parseDiscoverSpec } from "@/lib/discover-spec";
-import { AUTO_LOAD_MARGIN, formatTime, range, shouldAutoLoad, shuffled } from "@/lib/util";
-import { capture, details, recsPage, result, trackPage } from "./fixtures";
+import { AUTO_LOAD_MARGIN, buyLabel, formatTime, range, shouldAutoLoad, shuffled } from "@/lib/util";
+import { capture, details, disco, recsPage, result, trackPage } from "./fixtures";
 
 describe("parseDiscoverSpec", () => {
   it("builds the same request body as the discover page", () => {
@@ -184,6 +184,52 @@ describe("bandcamp helpers", () => {
     expect(parseRecommendations("<html>no section</html>")).toEqual({ title: null, items: [] });
   });
 
+  it("numbers a standalone track, which has no track_num", () => {
+    const d = details(1, 1);
+    (d.tracks[0] as { track_num: number | null }).track_num = null; // as the API sends it
+    expect(toTracks(d)[0]!.num).toBe(1);
+  });
+
+  it("knows a standalone track is one track before its tracklist loads", () => {
+    const items = toArtistItems(
+      { discography: [disco(1, null, { item_type: "track" }), disco(2, null)] } as never,
+      "https://someband.bandcamp.com",
+    );
+    expect(items.map((i) => i.trackCount)).toEqual([1, 0]);
+  });
+
+  it("reads how a release is sold", () => {
+    const sold = { is_purchasable: true, is_set_price: true, price: 7, currency: "USD", streaming_limit: 3 };
+    expect(toBuy({ ...details(1), ...sold }, "album")).toEqual({
+      what: "album",
+      digital: true,
+      editions: [],
+      price: 7,
+      currency: "USD",
+      nameYourPrice: false,
+      free: false,
+      preorder: false,
+      limit: 3,
+    });
+    expect(toBuy({ ...details(1), ...sold, is_set_price: false, price: 0, streaming_limit: 0 }, "track")).toMatchObject({ what: "track", nameYourPrice: true, limit: null });
+    expect(toBuy({ ...details(1), free_download: true }, "album")).toMatchObject({ free: true });
+    expect(toBuy({ ...details(1), is_purchasable: false }, "album")).toBeNull();
+  });
+
+  it("sells physical editions when the download isn't for sale", () => {
+    const pkgs = { package_details_lite: { 11: { title: "Black Vinyl" }, 12: { title: "Cassette" } } };
+    expect(toBuy({ ...details(1), is_purchasable: false, ...pkgs }, "album")).toMatchObject({ digital: false, editions: ["Black Vinyl", "Cassette"] });
+    expect(toBuy({ ...details(1), is_purchasable: true, price: 9, ...pkgs }, "album")).toMatchObject({ digital: true, editions: ["Black Vinyl", "Cassette"] });
+  });
+
+  it("knows which tracks of an album are sold on their own", () => {
+    const d = details(1);
+    Object.assign(d.tracks[1]!, { is_purchasable: true, is_set_price: true, price: 1 });
+    const tracks = toTracks({ ...d, currency: "EUR" });
+    expect(tracks.map((t) => t.buy?.price ?? null)).toEqual([null, 1, null]);
+    expect(tracks[1]!.buy).toMatchObject({ what: "track", currency: "EUR", digital: true });
+  });
+
   it("keeps only streamable tracks", () => {
     const d = details(1);
     d.tracks[1]!.is_streamable = false;
@@ -192,6 +238,19 @@ describe("bandcamp helpers", () => {
 });
 
 describe("util", () => {
+  it("labels the buy link like Bandcamp's prices", () => {
+    const buy = { what: "album" as const, digital: true, editions: [], price: 7, currency: "USD", nameYourPrice: false, free: false, preorder: false, limit: null };
+    expect(buyLabel(buy)).toBe("Buy album · $7");
+    expect(buyLabel({ ...buy, what: "track", price: 4.5, currency: "EUR" })).toBe("Buy track · €4.50");
+    expect(buyLabel({ ...buy, nameYourPrice: true })).toBe("Buy album · $7 or more");
+    expect(buyLabel({ ...buy, what: "track", nameYourPrice: true, price: 0 })).toBe("Buy track · name your price");
+    expect(buyLabel({ ...buy, preorder: true })).toBe("Pre-order album · $7");
+    expect(buyLabel({ ...buy, free: true })).toBe("Free download");
+    expect(buyLabel({ ...buy, currency: "dollars" })).toBe("Buy album · 7 dollars");
+    expect(buyLabel({ ...buy, digital: false, editions: ["Black Vinyl"] })).toBe("Buy · physical edition");
+    expect(buyLabel({ ...buy, digital: false, editions: ["Black Vinyl", "CD"] })).toBe("Buy · 2 physical editions");
+  });
+
   it("formats times like Bandcamp", () => {
     expect(formatTime(0)).toBe("00:00");
     expect(formatTime(174.6)).toBe("02:54");

@@ -82,6 +82,8 @@ export interface Track {
   hasLyrics?: boolean;
   /** Track page, where the lyrics text lives. */
   url?: string;
+  /** Set when the track is also sold on its own, from tralbum_details. */
+  buy?: Buy | null;
 }
 
 export interface Item {
@@ -101,12 +103,32 @@ export interface Item {
   released?: number | null;
   featured: Track | null;
   tracks: Track[] | null;
+  /** How the release is sold, from its tracklist; null when it can't be bought, undefined until loaded. */
+  buy?: Buy | null;
+}
+
+/** Price and terms of a release (or a single track) on Bandcamp. */
+export interface Buy {
+  /** What the digital purchase is. */
+  what: "album" | "track";
+  /** The download can be bought; false when only physical editions are sold. */
+  digital: boolean;
+  /** Physical editions (vinyl, CD, cassette…) by title. */
+  editions: string[];
+  /** The price of the download, or the minimum when the buyer names their price. */
+  price: number;
+  currency: string;
+  nameYourPrice: boolean;
+  free: boolean;
+  preorder: boolean;
+  /** Full plays the artist allows before asking to buy (Bandcamp's streaming_limit). */
+  limit: number | null;
 }
 
 export type Mode = "track" | "album";
 
 /** Keys of Settings, as read from extension storage. */
-export const SETTINGS_KEYS = ["mode", "shuffle", "repeat", "artistOrder"] as const;
+export const SETTINGS_KEYS = ["mode", "shuffle", "repeat", "artistOrder", "plays", "nudgeOff"] as const;
 
 export interface Settings {
   mode: Mode;
@@ -115,6 +137,10 @@ export interface Settings {
   repeat: boolean;
   /** Order of an artist's releases. */
   artistOrder: ArtistOrder;
+  /** Full plays per track ("t<id>"), kept only in the browser for the buy reminder. */
+  plays: Record<string, number>;
+  /** Releases ("a<id>" / "t<id>") whose buy reminder was closed. */
+  nudgeOff: string[];
 }
 
 /** Messages the extension sends to the bandcamp.com content script. */
@@ -161,6 +187,12 @@ export interface PublicState {
       wishlisted: boolean;
       owned: boolean;
       tracks: (Track & { wishlisted: boolean })[] | null;
+      /** Null when it can't be bought or is already owned; undefined until the tracklist loads. */
+      buy: Buy | null | undefined;
+      /** The playing track, when it is also sold on its own (a track of an album). */
+      trackBuy: (Buy & { url: string }) | null;
+      /** Full plays of the most played track, once that reached the artist's limit: what to buy. */
+      nudge: { plays: number; url: string; free: boolean } | null;
     };
   } | null;
   queue: {
@@ -193,6 +225,7 @@ export type PlayerCommand =
   | { cmd: "setMode"; mode: Mode }
   | { cmd: "toggleWishlist"; itemIndex: number; trackId?: number }
   | { cmd: "dismissNotice" }
+  | { cmd: "dismissNudge" }
   | { cmd: "loadMore" }
   | { cmd: "getLyrics"; itemIndex: number; trackId: number }
   | { cmd: "getRecs"; url: string }

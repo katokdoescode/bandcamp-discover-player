@@ -1,4 +1,4 @@
-import type { AudioEvent, AudioPort, PlayerEnv } from "@/lib/player";
+import type { AudioEvent, AudioPort, BandcampTab, PlayerEnv } from "@/lib/player";
 import { Player } from "@/lib/player";
 import type { ArtistSpec, Capture, ContentMessage, DiscoverResult, DiscoverSpec, Settings } from "@/lib/types";
 
@@ -156,6 +156,8 @@ export interface Setup {
   artist?: ArtistSpec;
   /** HTML of pages by URL, for fetchText. */
   pages?: Record<string, string>;
+  /** Open Bandcamp tabs; default: one bandcamp.com tab. */
+  tabs?: BandcampTab[];
 }
 
 /** Default API: tralbum_details per release id, discover_web → no more results. */
@@ -179,12 +181,14 @@ export async function setup(o: Setup = {}) {
   const state = { capture: o.capture, spec: o.spec === undefined ? SPEC : o.spec, fanId: o.fanId ?? null };
   const api = o.api ?? defaultApi(o.silent, o.lyrics);
   const pageCalls: string[] = [];
+  const wishTabs: number[] = [];
 
   const env: PlayerEnv = {
     audio,
-    bandcampTabs: async () => [{ id: 7, active: true }],
-    async sendToTab(_tabId, msg) {
+    bandcampTabs: async () => o.tabs ?? [{ id: 7, active: true }],
+    async sendToTab(tabId, msg) {
       sent.push(msg);
+      if (msg.type === "setWishlisted") wishTabs.push(tabId);
       switch (msg.type) {
         case "getDiscoverSpec":
           return state.spec as any;
@@ -216,5 +220,5 @@ export async function setup(o: Setup = {}) {
   };
   const player = new Player(env);
   await player.init();
-  return { player, audio, sent, apiCalls, pageCalls, settings, state, view: () => player.publicState() };
+  return { player, audio, sent, wishTabs, apiCalls, pageCalls, settings, state, view: () => player.publicState() };
 }

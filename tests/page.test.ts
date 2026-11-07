@@ -63,6 +63,11 @@ describe("page data", () => {
     });
     expect(readCrumbs(page(""))).toEqual({});
   });
+
+  it("reads wishlist crumbs of the discover page from its blob", () => {
+    const html = `<div id="DiscoverApp" data-blob="${blob({ pageContext: { crumbs: { collect_item_cb: "d1", uncollect_item_cb: "d2" } } })}"></div>`;
+    expect(readCrumbs(page(html))).toEqual({ collect_item_cb: "d1", uncollect_item_cb: "d2" });
+  });
 });
 
 describe("setWishlisted", () => {
