@@ -83,8 +83,6 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 ### 1.0.0
 
-<!-- Each feature merged into release/1.0.0 adds its line here. -->
-
 - The list loads more releases by itself when you scroll near its end.
 - Repeat (beta) in full releases mode loops the current release; next and previous still move between releases.
 - Lyrics: tracks that have them show a "lyrics" link; the text opens in place of the list.
