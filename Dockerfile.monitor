@@ -1,0 +1,8 @@
+# The weekly Bandcamp live check (scripts/monitor.mjs) with Chromium, for a server's cron:
+#   docker build -f Dockerfile.monitor -t bandcamp-monitor .
+#   docker run --rm -e GITHUB_TOKEN=<token> bandcamp-monitor
+FROM mcr.microsoft.com/playwright:v1.64.1-noble
+WORKDIR /app
+COPY . .
+RUN npm ci
+CMD ["node", "scripts/monitor.mjs"]

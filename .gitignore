@@ -6,3 +6,4 @@ stats.html
 *.log
 .DS_Store
 dist/
+live-report/

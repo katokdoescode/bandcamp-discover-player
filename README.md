@@ -144,6 +144,43 @@ Bandcamp endpoints used:
 - release pages on `*.bandcamp.com` — the "you may also like" section;
 - `POST /collect_item_cb`, `/uncollect_item_cb` — wishlist, same as the site's button.
 
+## Bandcamp monitor
+
+`tests/live` checks that Bandcamp still answers the way the extension expects: it opens
+real pages in Chromium (Playwright) and runs the extension's own parsers on discover
+results, tracklists, prices, artist pages, recommendations and lyrics. A check that fails
+names the field that changed.
+
+```bash
+npx playwright install chromium
+```
+
+```bash
+npm run monitor        # runs the checks; with GITHUB_TOKEN set, files the result as an issue
+```
+
+`scripts/monitor.mjs` keeps one issue per outcome, labelled `bandcamp-monitor`:
+"Bandcamp changed something the extension relies on" when a check fails, or
+"Bandcamp monitor can't reach Bandcamp" when Bandcamp answers with its bot check or a
+rate limit (then nothing could be checked). It comments only when the failures change
+and closes the issue once the checks pass. Exit code: 0 passed, 1 changed, 2 blocked.
+
+To run it weekly on a server:
+
+```bash
+docker build -f Dockerfile.monitor -t bandcamp-monitor .
+```
+
+```bash
+# crontab: Mondays at 06:00
+0 6 * * 1 docker run --rm -e GITHUB_TOKEN=<token> bandcamp-monitor
+```
+
+The token needs Issues read and write on this repository (a fine-grained token is enough).
+Bandcamp shows its bot check to headless browsers, so from many servers the run ends as
+"can't reach Bandcamp"; the monitor does not try to get around it. The wishlist needs a
+logged-in account and is not checked.
+
 ## Releases
 
 CI (`.github/workflows/ci.yml`) runs on every push to `main` and on pull requests:
