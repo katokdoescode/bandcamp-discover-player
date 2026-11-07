@@ -1,6 +1,6 @@
 import { browser, type Browser } from "wxt/browser";
 import { request } from "@/lib/messaging";
-import type { LyricsResult, PageSpec, PlayerCommand, PlayerEvent, PublicState } from "@/lib/types";
+import type { LyricsResult, PageSpec, PlayerCommand, PlayerEvent, PublicState, RecsResult } from "@/lib/types";
 import { formatTime as fmt, shouldAutoLoad } from "@/lib/util";
 
 type TabSpec = PageSpec & { sig: string | null };
@@ -19,6 +19,9 @@ let reqSeq = 0;
 /** The track whose lyrics replace the queue; `follow` keeps it on the playing track. */
 let lyricsView: { itemIndex: number; trackId: number; title: string; follow: boolean } | null = null;
 let lyricsShown = ""; // itemIndex:trackId of the text on screen
+/** The release whose recommendations replace the queue; it stays put when playback moves on. */
+let recsView: { url: string; release: string } | null = null;
+let recsShown = ""; // url of the recommendations on screen
 let autoLoadSent = false; // a loadMore request is in flight
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
@@ -152,7 +155,16 @@ function render(): void {
   }
 
   $("playBtn").classList.toggle("playing", !!cur && !state.paused);
-  document.querySelectorAll<HTMLElement>(".tab").forEach((t) => t.classList.toggle("active", t.dataset.mode === state!.mode));
+  document
+    .querySelectorAll<HTMLButtonElement>(".tab[data-mode]")
+    .forEach((t) => t.classList.toggle("active", !recsView && t.dataset.mode === state!.mode));
+  // Recommendations always play whole releases.
+  const trackTab = document.querySelector<HTMLButtonElement>('.tab[data-mode="track"]')!;
+  trackTab.disabled = state.source?.kind === "recs";
+  trackTab.title = trackTab.disabled ? "recommendations always play whole releases" : "";
+  $("recsTab").hidden = !recsView && !cur?.release.hasRecs;
+  $("recsTab").classList.toggle("active", !!recsView);
+  $("alsoLikeBtn").hidden = !cur?.release.hasRecs;
   $<HTMLInputElement>("shuffle").checked = state.shuffle;
   $<HTMLInputElement>("repeat").checked = state.repeat;
   $("repeatToggle").hidden = state.mode !== "album"; // looping a release only makes sense when playing it in full
@@ -176,6 +188,7 @@ function render(): void {
   renderTime();
   renderQueue();
   renderLyrics();
+  renderRecs();
   maybeAutoLoad();
 }
 
@@ -295,6 +308,7 @@ function renderQueue(): void {
 function toggleLyrics(v: NonNullable<typeof lyricsView>): void {
   const same = lyricsView && lyricsView.follow === v.follow && (v.follow || lyricsView.trackId === v.trackId);
   lyricsView = same ? null : v;
+  if (lyricsView) recsView = null;
   queueKey = ""; // redraw the lyrics links' state
   render();
 }
@@ -308,7 +322,7 @@ function renderLyrics(): void {
   }
   const open = !!lyricsView && !!s.source;
   $("lyricsView").hidden = !open;
-  $("queue").hidden = open;
+  $("queue").hidden = open || !!recsView;
   if (open) $("foot").hidden = true;
   if (!open) {
     lyricsShown = "";
@@ -332,6 +346,76 @@ function renderLyrics(): void {
   send<LyricsResult>({ cmd: "getLyrics", itemIndex: v.itemIndex, trackId: v.trackId }).then(
     (r) => ("error" in r ? show(r.error, true) : show(r.text ?? "No lyrics for this track.", !r.text)),
     (e: unknown) => show(e instanceof Error ? e.message : String(e), true),
+  );
+}
+
+// ---------- you may also like ----------
+
+/** Opens the recommendations of the playing release, or closes them. */
+function openRecs(): void {
+  const rel = state?.current?.release;
+  recsView = rel?.hasRecs ? { url: rel.url, release: rel.title } : null;
+  recsShown = ""; // an explicit open always (re)loads
+  lyricsView = null;
+  render();
+}
+
+function renderRecs(): void {
+  const s = state!;
+  const open = !!recsView && !!s.source;
+  $("recsView").hidden = !open;
+  if (!open) {
+    recsShown = "";
+    return;
+  }
+  $("queue").hidden = true;
+  $("foot").hidden = true;
+  const v = recsView!;
+  const rel = s.current?.release;
+  $("recsRefresh").hidden = !rel?.hasRecs || rel.url === v.url;
+  $("recsFor").textContent = `recommended on ${v.release}`;
+  if (recsShown === v.url) return;
+  recsShown = v.url;
+
+  const list = $("recsList");
+  const status = $("recsStatus");
+  list.textContent = "";
+  $("recsTitle").textContent = "You may also like";
+  status.textContent = "loading recommendations…";
+  send<RecsResult>({ cmd: "getRecs", url: v.url }).then(
+    (r) => {
+      if (recsShown !== v.url) return; // switched to another release meanwhile
+      if ("error" in r) {
+        status.textContent = r.error; // stays until the user opens the recommendations again
+        return;
+      }
+      if (r.title) $("recsTitle").textContent = r.title;
+      status.textContent = r.items.length ? "" : "Bandcamp recommends nothing for this release.";
+      r.items.forEach((it, i) => {
+        const row = el("div", "row");
+        row.append(el("span", "play-col"));
+        const img = el("img", "thumb-col");
+        img.loading = "lazy";
+        img.alt = "";
+        if (it.thumb) img.src = it.thumb;
+        row.append(img);
+        const title = el("span", "title-col");
+        title.append(el("span", "t", it.title), el("span", "a", `by ${it.artist}`));
+        row.append(title);
+        row.title = "play these recommendations, starting here";
+        row.addEventListener("click", () => {
+          recsView = null;
+          send({ cmd: "playRecs", url: v.url, index: i }).catch(() => {});
+          render();
+        });
+        const li = el("li");
+        li.append(row);
+        list.append(li);
+      });
+    },
+    (e: unknown) => {
+      if (recsShown === v.url) status.textContent = e instanceof Error ? e.message : String(e);
+    },
   );
 }
 
@@ -368,9 +452,18 @@ $("trackWish").addEventListener("click", (e) => {
 });
 $<HTMLInputElement>("repeat").addEventListener("change", (e) => void send({ cmd: "setRepeat", on: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>("shuffle").addEventListener("change", (e) => void send({ cmd: "setShuffle", on: (e.target as HTMLInputElement).checked }));
-document.querySelectorAll<HTMLElement>(".tab").forEach((t) =>
-  t.addEventListener("click", () => void send({ cmd: "setMode", mode: t.dataset.mode === "album" ? "album" : "track" })),
+document.querySelectorAll<HTMLElement>(".tab[data-mode]").forEach((t) =>
+  t.addEventListener("click", () => {
+    recsView = null; // the mode tabs show the queue
+    render();
+    void send({ cmd: "setMode", mode: t.dataset.mode === "album" ? "album" : "track" });
+  }),
 );
+$("recsTab").addEventListener("click", () => {
+  if (!recsView) openRecs();
+});
+$("alsoLikeBtn").addEventListener("click", openRecs);
+$("recsRefresh").addEventListener("click", openRecs);
 
 $("loadBtn").addEventListener("click", () => {
   if (activeTabId == null) return;

@@ -168,8 +168,11 @@ export function toTracks(data: TralbumDetails): Track[] {
   });
 }
 
-/** Lyrics can only be fetched from Bandcamp pages (the extension has no access to artists' custom domains). */
-export function canFetchLyrics(url: string | undefined): url is string {
+/**
+ * True for pages on bandcamp.com and its artist subdomains: the only pages the extension
+ * can fetch (lyrics, recommendations). Artists' custom domains are out of reach.
+ */
+export function isBandcampPage(url: string | undefined): url is string {
   if (!url) return false;
   try {
     const u = new URL(url);
@@ -185,6 +188,54 @@ const decodeEntities = (s: string) =>
     if (e[0] === "#") return String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1)));
     return ENTITIES[e.toLowerCase()] ?? m;
   });
+
+/** The "If you like …, you may also like" section of a release page. */
+export interface Recommendations {
+  /** "If you like DICKWEED, you may also like:" */
+  title: string | null;
+  items: Item[];
+}
+
+const attrOf = (attrs: string, name: string) => {
+  const m = new RegExp(`\\b${name}="([^"]*)"`).exec(attrs);
+  return m ? decodeEntities(m[1]!) : null;
+};
+
+/**
+ * Recommendations from the HTML of an album or track page. Bandcamp renders them
+ * server-side as li.recommended-album with data-* attributes; parsed as text, without a DOM.
+ */
+export function parseRecommendations(html: string): Recommendations {
+  const titleMatch = /class="section-title"[^>]*>([\s\S]*?)<\//.exec(html);
+  const title = titleMatch ? decodeEntities(titleMatch[1]!.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim() || null : null;
+  const items: Item[] = [];
+  const re = /<li\s+class="recommended-album[^"]*"([^>]*)>([\s\S]*?)<\/li>/g;
+  for (let m; (m = re.exec(html)); ) {
+    const [, attrs, body] = m as unknown as [string, string, string];
+    const id = Number(attrOf(attrs, "data-albumid"));
+    const bandId = Number(attrOf(attrs, "data-artistid"));
+    const href = /<a\b[^>]*href="([^"]*)"/.exec(body);
+    const url = href ? decodeEntities(href[1]!).replace(/\?.*$/, "") : "";
+    if (!id || !bandId || !isBandcampPage(url)) continue;
+    const art = /\/img\/a(\d+)_/.exec(body);
+    items.push({
+      id,
+      type: url.includes("/track/") ? "t" : "a",
+      title: attrOf(attrs, "data-albumtitle") || "",
+      artist: attrOf(attrs, "data-artist") || "",
+      bandId,
+      url,
+      artId: art ? Number(art[1]) : null,
+      trackCount: 0,
+      wishlisted: false,
+      owned: false,
+      year: null,
+      featured: null,
+      tracks: null,
+    });
+  }
+  return { title, items };
+}
 
 /**
  * Lyrics text from a Bandcamp track page: its ld+json (recordingOf.lyrics.text),

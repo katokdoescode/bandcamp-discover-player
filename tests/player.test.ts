@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { OWN_MARK } from "@/lib/bandcamp";
 import { Player } from "@/lib/player";
-import { ARTIST, artistApi, capture, defaultApi, disco, result, setup, trackPage, trackUrl } from "./fixtures";
+import { ARTIST, artistApi, capture, defaultApi, disco, recsPage, result, setup, trackPage, trackUrl } from "./fixtures";
 
 const TAB = 7;
 const playing = (audio: { src: string }) => audio.src;
@@ -324,6 +324,61 @@ describe("an artist's releases", () => {
   it("is offered on artist pages", async () => {
     const { player } = await artistSetup();
     await expect(player.handle({ cmd: "inspectTab", tabId: TAB })).resolves.toMatchObject({ kind: "artist", label: "Some Band", sig: null });
+  });
+});
+
+describe("you may also like", () => {
+  const REL = "https://band1.bandcamp.com/album/r1";
+  const recsSetup = (o: Parameters<typeof setup>[0] = {}) =>
+    setup({ capture: capture([1, 2]), pages: { [REL]: recsPage([3, 4, 5]) }, ...o });
+
+  it("offers the playing release's recommendations", async () => {
+    const { player, view, pageCalls } = await recsSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().current!.release.hasRecs).toBe(true);
+    const r = (await player.handle({ cmd: "getRecs", url: REL })) as any;
+    expect(r.title).toBe("If you like DICKWEED, you may also like:");
+    expect(r.items.map((i: any) => i.title)).toEqual(["Release 3 & Friends", "Release 4 & Friends", "Release 5 & Friends"]);
+    await player.handle({ cmd: "getRecs", url: REL });
+    expect(pageCalls).toEqual([REL]); // cached
+  });
+
+  it("plays them in full, from the chosen one, whatever the saved mode", async () => {
+    const { player, view, audio, settings } = await recsSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "playRecs", url: REL, index: 1 });
+    expect(view().source).toMatchObject({ kind: "recs", label: "like Release 1", pageUrl: REL });
+    expect(view().mode).toBe("album");
+    expect(settings.mode).toBeUndefined(); // the user's own mode is untouched
+    expect(playing(audio)).toBe("https://stream/40?fresh=0");
+    await player.handle({ cmd: "next" });
+    expect(playing(audio)).toBe("https://stream/41?fresh=0");
+    expect(view().queue.map((q) => q.title)).toEqual(["Release 3 & Friends", "Release 4 & Friends", "Release 5 & Friends"]);
+  });
+
+  it("never asks discover for more", async () => {
+    const { player, apiCalls, view } = await recsSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    const before = apiCalls.filter((c) => c.url.includes("discover_web")).length;
+    await player.handle({ cmd: "playRecs", url: REL, index: 2 });
+    await player.handle({ cmd: "loadMore" });
+    expect(apiCalls.filter((c) => c.url.includes("discover_web")).length).toBe(before);
+    expect(view().hasMore).toBe(false);
+  });
+
+  it("goes back to the saved mode for the next discover list", async () => {
+    const { player, view } = await recsSetup();
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await player.handle({ cmd: "playRecs", url: REL, index: 0 });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    expect(view().mode).toBe("track");
+  });
+
+  it("reports a page that could not be loaded without touching the player's error line", async () => {
+    const { player, view } = await recsSetup({ pages: {} });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await expect(player.handle({ cmd: "getRecs", url: REL })).resolves.toEqual({ error: expect.stringContaining("Could not load") });
+    expect(view().error).toBeNull();
   });
 });
 

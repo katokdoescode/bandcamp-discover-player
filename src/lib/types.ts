@@ -134,7 +134,7 @@ export type ContentMessage =
 
 /** State the popup renders. */
 export interface PublicState {
-  source: { kind: "discover" | "artist"; label: string; pageUrl: string; sig: string | null } | null;
+  source: { kind: "discover" | "artist" | "recs"; label: string; pageUrl: string; sig: string | null } | null;
   notice: "login" | null;
   mode: Mode;
   shuffle: boolean;
@@ -156,6 +156,8 @@ export interface PublicState {
       url: string;
       art: string | null;
       year: number | null;
+      /** The release page can be read for "you may also like". */
+      hasRecs: boolean;
       wishlisted: boolean;
       owned: boolean;
       tracks: (Track & { wishlisted: boolean })[] | null;
@@ -192,10 +194,17 @@ export type PlayerCommand =
   | { cmd: "toggleWishlist"; itemIndex: number; trackId?: number }
   | { cmd: "dismissNotice" }
   | { cmd: "loadMore" }
-  | { cmd: "getLyrics"; itemIndex: number; trackId: number };
+  | { cmd: "getLyrics"; itemIndex: number; trackId: number }
+  | { cmd: "getRecs"; url: string }
+  | { cmd: "playRecs"; url: string; index: number };
 
 /** Answer to getLyrics: the text (null when the track has none), or why it could not be loaded. */
 export type LyricsResult = { text: string | null } | { error: string };
+
+/** Answer to getRecs: the releases recommended on a release page, or why they could not be loaded. */
+export type RecsResult =
+  | { title: string | null; items: { title: string; artist: string; url: string; thumb: string | null }[] }
+  | { error: string };
 
 /** Player → popup events. */
 export type PlayerEvent =

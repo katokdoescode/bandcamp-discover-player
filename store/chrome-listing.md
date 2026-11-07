@@ -21,6 +21,7 @@ Features:
 - Plays exactly the releases the page shows, including ones loaded with "View more results", and loads more by itself as you scroll or listen to the end.
 - Two modes: one track per release, or every release in full.
 - Shuffle the order of releases (tracks inside a release stay in order).
+- "You may also like": from the release you are listening to, play the releases Bandcamp recommends with it.
 - On an artist's or label's page, play all their releases, newest or oldest first.
 - Repeat (beta): loop the release you are listening to in full.
 - Read the lyrics of the playing track, when the artist has added them.
@@ -63,7 +64,7 @@ Plays the releases listed on a Bandcamp discover page, or all releases on an art
 - **tabs** — Finds the open bandcamp.com discover tab the user wants to play, and bandcamp.com tabs used to make requests with the user's Bandcamp session (tracklists, wishlist).
 - **storage** — Saves the player settings (mode, shuffle, repeat, artist release order) and the current queue, so playback can resume after Chrome closes the audio document.
 - **offscreen** — Manifest V3 service workers cannot play audio; an offscreen document with an `<audio>` element plays the tracks while the popup is closed.
-- **Host permission `*://*.bandcamp.com/*`** — Reads the discover page's release list and the band id on an artist's page, calls Bandcamp's own endpoints for tracklists, discographies and the wishlist, and reads lyrics from track pages.
+- **Host permission `*://*.bandcamp.com/*`** — Reads the discover page's release list and the band id on an artist's page, calls Bandcamp's own endpoints for tracklists, discographies and the wishlist, and reads lyrics and "you may also like" recommendations from release pages.
 - **Host permission `*://*.bcbits.com/*`** — Bandcamp's CDN for audio streams and cover art.
 
 ### Remote code

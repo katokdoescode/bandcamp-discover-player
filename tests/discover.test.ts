@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { artUrl, canFetchLyrics, isPageDiscoverRequest, parseLyrics, normalizeResults, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
+import { artUrl, isBandcampPage, parseRecommendations, isPageDiscoverRequest, parseLyrics, normalizeResults, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
 import { applyDiscoverResponse } from "@/lib/captures";
 import { parseDiscoverSpec } from "@/lib/discover-spec";
 import { AUTO_LOAD_MARGIN, formatTime, range, shouldAutoLoad, shuffled } from "@/lib/util";
-import { capture, details, result, trackPage } from "./fixtures";
+import { capture, details, recsPage, result, trackPage } from "./fixtures";
 
 describe("parseDiscoverSpec", () => {
   it("builds the same request body as the discover page", () => {
@@ -155,16 +155,33 @@ describe("bandcamp helpers", () => {
   });
 
   it("fetches lyrics only from Bandcamp's own domains", () => {
-    expect(canFetchLyrics("https://twistedteens.bandcamp.com/track/why")).toBe(true);
-    expect(canFetchLyrics("https://music.someband.com/track/why")).toBe(false);
-    expect(canFetchLyrics("https://evilbandcamp.com/track/why")).toBe(false);
-    expect(canFetchLyrics(undefined)).toBe(false);
+    expect(isBandcampPage("https://twistedteens.bandcamp.com/track/why")).toBe(true);
+    expect(isBandcampPage("https://music.someband.com/track/why")).toBe(false);
+    expect(isBandcampPage("https://evilbandcamp.com/track/why")).toBe(false);
+    expect(isBandcampPage(undefined)).toBe(false);
   });
 
   it("keeps lyrics flags and track pages from the tracklist", () => {
     const tracks = toTracks(details(1, 3, [11]));
     expect(tracks.map((t) => t.hasLyrics)).toEqual([false, true, false]);
     expect(tracks[1]!.url).toBe("https://band1.bandcamp.com/track/t11");
+  });
+
+  it("reads the recommendations of a release page", () => {
+    const r = parseRecommendations(recsPage([3, 4]));
+    expect(r.title).toBe("If you like DICKWEED, you may also like:");
+    expect(r.items).toHaveLength(2);
+    expect(r.items[0]).toMatchObject({
+      id: 3,
+      type: "a",
+      title: "Release 3 & Friends",
+      artist: "Band 3",
+      bandId: 1003,
+      url: "https://band3.bandcamp.com/album/r3",
+      artId: 5003,
+      tracks: null,
+    });
+    expect(parseRecommendations("<html>no section</html>")).toEqual({ title: null, items: [] });
   });
 
   it("keeps only streamable tracks", () => {

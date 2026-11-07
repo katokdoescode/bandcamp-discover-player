@@ -40,6 +40,7 @@
         <h2 class="trackTitle" id="relTitle"></h2>
         <h3>by <a id="relArtist" target="_blank"></a><span class="year" id="relYear"></span><label class="toggle repeat" id="repeatToggle" title="repeat this release (beta)"><input type="checkbox" id="repeat"><span class="icon repeat-icon"></span></label></h3>
         <button class="wishlist-link" id="relWish"><span class="wish-icon"></span><span class="label">Wishlist</span></button>
+        <button class="link also-like" id="alsoLikeBtn" hidden>You may also like ›</button>
       </div>
     </div>
 
@@ -68,11 +69,12 @@
     <div class="tabs" role="tablist">
       <button class="tab" data-mode="track" role="tab">one track per release</button>
       <button class="tab" data-mode="album" role="tab">full releases</button>
+      <button class="tab" id="recsTab" role="tab" hidden>you may also like</button>
     </div>
     <div class="toggles">
       <label class="toggle shuffle" title="shuffle releases">
         <input type="checkbox" id="shuffle">
-        <span class="icon shuffle-icon"></span>shuffle
+        <span class="icon shuffle-icon"></span><span class="label">shuffle</span>
       </label>
     </div>
   </nav>
@@ -87,6 +89,16 @@
       <button class="link" id="lyricsBack">back to list</button>
     </div>
     <div class="lyrics-text" id="lyricsText"></div>
+  </section>
+
+  <section class="recs" id="recsView" hidden>
+    <div class="recs-head">
+      <h4 id="recsTitle"></h4>
+      <button class="link" id="recsRefresh" hidden title="show recommendations for the release that is playing now">refresh</button>
+    </div>
+    <div class="recs-for" id="recsFor"></div>
+    <div class="recs-status" id="recsStatus"></div>
+    <ol class="track_list recs-list" id="recsList"></ol>
   </section>
 
   <footer class="queue-foot" id="foot" hidden>
