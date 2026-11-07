@@ -13,7 +13,7 @@ player on a Bandcamp release page.
 ## Install
 
 - **Firefox:** [Discover Player for Bandcamp on addons.mozilla.org](https://addons.mozilla.org/addon/discover-player-for-bandcamp/)
-- **Chrome:** not in the Chrome Web Store yet. Install it from source (see below).
+- **Chrome:** not in the Chrome Web Store yet. Install it from a GitHub release (see below).
 
 Then open any `bandcamp.com/discover/...` page and click the extension's toolbar icon.
 
@@ -22,26 +22,18 @@ Then open any `bandcamp.com/discover/...` page and click the extension's toolbar
   <img src="docs/screenshots/popup-full-releases.png" alt="Full releases" width="380">
 </p>
 
-### Install from source
+### Install from a GitHub release (Chrome)
 
-Requires Node.js 22+ and git.
+1. Download `bandcamp-discover-player-<version>-chrome.zip` from the
+   [latest release](https://github.com/katokdoescode/bandcamp-discover-player/releases/latest)
+   and unzip it.
+2. Open `chrome://extensions` and turn on Developer mode.
+3. Click "Load unpacked" and choose the unzipped folder.
 
-```bash
-git clone https://github.com/katokdoescode/bandcamp-discover-player.git
-```
+Keep the folder: Chrome loads the extension from it. To update, download the new zip,
+replace the folder's contents and click the reload icon on the extension's card.
 
-```bash
-cd bandcamp-discover-player && npm ci && npm run build && npm run build:firefox
-```
-
-- **Chrome:** open `chrome://extensions`, turn on Developer mode, click "Load unpacked"
-  and choose `.output/chrome-mv3`.
-- **Firefox:** open `about:debugging#/runtime/this-firefox`, click "Load Temporary Add-on…"
-  and choose `.output/firefox-mv2/manifest.json`. Firefox removes temporary add-ons on
-  restart; for permanent use install it from addons.mozilla.org.
-
-Ready-made zips are also attached to each [GitHub release](https://github.com/katokdoescode/bandcamp-discover-player/releases).
-In Chrome, unzip one and load the folder as above.
+To build it yourself instead, see [Development](#development).
 
 ## Features
 
