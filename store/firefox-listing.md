@@ -87,11 +87,9 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 Support the artists: the player shows the release's price with a link to buy it on Bandcamp. After you've played a track to the end as many times as the artist allows before asking to buy (usually 3), it suggests buying the release. Close the reminder and it won't show again for that release. Play counts stay in your browser.
 
-### 1.0.2
-
-Single-track releases in an artist's discography show "1 track" and a proper track number instead of "0 tracks" and "null". Releases whose tracklist hasn't loaded yet no longer say "0 tracks".
-
-The wishlist heart works again on discover pages (Bandcamp moved what it needs) and when only an artist's page is open.
+Fixes:
+- The wishlist heart works again on discover pages (Bandcamp moved what it needs) and when only an artist's page is open.
+- Single-track releases in an artist's discography show "1 track" and a proper track number instead of "0 tracks" and "null". Releases whose tracklist hasn't loaded yet no longer say "0 tracks".
 
 ### 1.0.1
 
