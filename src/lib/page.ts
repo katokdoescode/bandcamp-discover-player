@@ -107,6 +107,9 @@ export async function setWishlisted(
 }
 
 export function readCrumbs(doc: Document): Record<string, string> {
+  // The new Vue discover page keeps them in its blob; release and artist pages in #js-crumbs-data.
+  const fromApp = readBlob(doc, "DiscoverApp")?.pageContext?.crumbs;
+  if (fromApp && typeof fromApp === "object") return { ...fromApp };
   const raw = doc.getElementById("js-crumbs-data")?.dataset.crumbs;
   try {
     return raw ? JSON.parse(raw) : {};
