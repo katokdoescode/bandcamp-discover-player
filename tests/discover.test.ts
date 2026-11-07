@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { artUrl, isBandcampPage, parseRecommendations, isPageDiscoverRequest, parseLyrics, normalizeResults, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
+import { artUrl, isBandcampPage, toArtistItems, parseRecommendations, isPageDiscoverRequest, parseLyrics, normalizeResults, releaseYear, toItem, toTracks } from "@/lib/bandcamp";
 import { applyDiscoverResponse } from "@/lib/captures";
 import { parseDiscoverSpec } from "@/lib/discover-spec";
 import { AUTO_LOAD_MARGIN, formatTime, range, shouldAutoLoad, shuffled } from "@/lib/util";
-import { capture, details, recsPage, result, trackPage } from "./fixtures";
+import { capture, details, disco, recsPage, result, trackPage } from "./fixtures";
 
 describe("parseDiscoverSpec", () => {
   it("builds the same request body as the discover page", () => {
@@ -182,6 +182,20 @@ describe("bandcamp helpers", () => {
       tracks: null,
     });
     expect(parseRecommendations("<html>no section</html>")).toEqual({ title: null, items: [] });
+  });
+
+  it("numbers a standalone track, which has no track_num", () => {
+    const d = details(1, 1);
+    (d.tracks[0] as { track_num: number | null }).track_num = null; // as the API sends it
+    expect(toTracks(d)[0]!.num).toBe(1);
+  });
+
+  it("knows a standalone track is one track before its tracklist loads", () => {
+    const items = toArtistItems(
+      { discography: [disco(1, null, { item_type: "track" }), disco(2, null)] } as never,
+      "https://someband.bandcamp.com",
+    );
+    expect(items.map((i) => i.trackCount)).toEqual([1, 0]);
   });
 
   it("keeps only streamable tracks", () => {

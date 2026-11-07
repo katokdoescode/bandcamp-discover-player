@@ -99,7 +99,7 @@ export function toArtistItems(data: BandDetails, bandUrl: string): Item[] {
       bandId: d.band_id,
       url: bandUrl,
       artId: d.art_id || null,
-      trackCount: 0,
+      trackCount: d.item_type === "track" ? 1 : 0,
       wishlisted: false,
       owned: false,
       year: releaseYear(d.release_date),
@@ -150,13 +150,14 @@ export interface TralbumDetails {
 
 /** Streamable tracks of a release, from a tralbum_details response. */
 export function toTracks(data: TralbumDetails): Track[] {
-  return (data.tracks || []).flatMap((t) => {
+  // A standalone track has no track_num; number tracks by position instead.
+  return (data.tracks || []).flatMap((t, i) => {
     const stream = t.is_streamable ? t.streaming_url?.["mp3-128"] : undefined;
     if (!stream) return [];
     return [
       {
         id: t.track_id,
-        num: t.track_num,
+        num: t.track_num ?? i + 1,
         title: t.title,
         artist: t.band_name || data.tralbum_artist,
         stream,
@@ -226,7 +227,7 @@ export function parseRecommendations(html: string): Recommendations {
       bandId,
       url,
       artId: art ? Number(art[1]) : null,
-      trackCount: 0,
+      trackCount: url.includes("/track/") ? 1 : 0,
       wishlisted: false,
       owned: false,
       year: null,

@@ -263,7 +263,9 @@ function renderQueue(): void {
     title.append(el("span", "a", s.mode === "track" && q.featured ? `${q.artist} — “${q.featured}”` : `by ${q.artist}`));
     row.append(title);
 
-    const time = s.mode === "album" ? `${q.trackCount} ${q.trackCount === 1 ? "track" : "tracks"}` : q.duration ? fmt(q.duration) : "";
+    // 0 means not known yet: an artist's releases get their count when their tracklist loads.
+    const count = q.trackCount ? `${q.trackCount} ${q.trackCount === 1 ? "track" : "tracks"}` : "";
+    const time = s.mode === "album" ? count : q.duration ? fmt(q.duration) : "";
     const timeCol = el("span", "time", time);
     if (q.year) timeCol.append(el("span", "year", String(q.year)));
     row.append(timeCol);
@@ -286,7 +288,7 @@ function renderQueue(): void {
           });
         }
         sub.append(
-          el("span", "num", `${t.num}.`),
+          el("span", "num", t.num ? `${t.num}.` : ""),
           el("span", "name", t.title),
           lyricsLink,
           el("span", "time", fmt(t.duration)),
