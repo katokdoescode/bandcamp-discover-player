@@ -29,6 +29,7 @@ What it does:
 - Shows lyrics for tracks that have them.
 - On an artist's or label's page, plays their whole discography, newest or oldest first.
 - "You may also like" plays what Bandcamp recommends for the current release.
+- Shows the release's price with a link to buy it on Bandcamp, and reminds you to buy what you keep coming back to (you can close the reminder).
 - The heart adds a release or track to your wishlist (log in on bandcamp.com first).
 - Keeps playing when the popup is closed. Media keys work.
 
@@ -75,12 +76,16 @@ How to test: open https://bandcamp.com/discover/punk+hardcore-punk/digital?s=ran
 Permissions:
 - `webRequest`, `webRequestBlocking`: used only on `https://bandcamp.com/api/discover/1/discover_web*` with `filterResponseData`, to read (never modify) the release list the discover page itself loads, so the player plays exactly what the user sees. The data is passed through unchanged.
 - `tabs`: to find the active discover tab and open bandcamp.com tabs.
-- `storage`: player settings (mode, shuffle, repeat, artist release order).
+- `storage`: player settings (mode, shuffle, repeat, artist release order), and play counts per track for the buy reminder; nothing leaves the browser.
 - Host permissions `*.bandcamp.com`, `*.bcbits.com`: Bandcamp's API, audio streams and cover art.
 
 The content script on bandcamp.com uses `content.fetch` to make same-origin requests as the page (release tracklists, and wishlist add/remove, which only happens when the user clicks a heart). On artists' own `<name>.bandcamp.com` pages the same content script only reads the band id from the page's `data-band` attribute, when the popup asks. The background page fetches Bandcamp track pages (`*.bandcamp.com/track/…`) to read their lyrics, and release pages to read their "you may also like" section, when the user opens them, and calls `bandcamp.com/api/mobile/25/band_details` for an artist's discography. No remote code is loaded or executed; no data is sent anywhere except to Bandcamp.
 
 ## Release notes
+
+### 1.1.0
+
+Support the artists: the player shows the release's price with a link to buy it on Bandcamp. After you've played a track to the end as many times as the artist allows before asking to buy (usually 3), it suggests buying the release. Close the reminder and it won't show again for that release. Play counts stay in your browser.
 
 ### 1.0.2
 

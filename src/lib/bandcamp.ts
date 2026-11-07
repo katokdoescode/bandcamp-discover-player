@@ -1,7 +1,7 @@
 // Bandcamp endpoints and conversions from their JSON to our own shapes.
 // These are Bandcamp's internal APIs (the ones its own pages use), not a public API.
 
-import type { ArtistOrder, DiscoverResult, Item, Track } from "./types";
+import type { ArtistOrder, Buy, DiscoverResult, Item, Track } from "./types";
 
 export const API = "https://bandcamp.com/api";
 export const DISCOVER_PATH = "/api/discover/1/discover_web";
@@ -135,6 +135,15 @@ export interface TralbumDetails {
   featured_track_id?: number;
   /** Unix seconds. */
   release_date?: number;
+  is_purchasable?: boolean;
+  free_download?: boolean;
+  is_preorder?: boolean;
+  /** false: the price is a minimum and the buyer names their own. */
+  is_set_price?: boolean;
+  price?: number;
+  currency?: string;
+  /** Full plays allowed before the artist asks to buy. */
+  streaming_limit?: number | null;
   tracks?: {
     track_id: number;
     track_num?: number;
@@ -146,6 +155,19 @@ export interface TralbumDetails {
     has_lyrics?: boolean;
     track_url?: string;
   }[];
+}
+
+/** How a release is sold, from a tralbum_details response; null when it can't be bought. */
+export function toBuy(data: TralbumDetails): Buy | null {
+  if (!data.is_purchasable && !data.free_download) return null;
+  return {
+    price: Number(data.price) || 0,
+    currency: data.currency || "USD",
+    nameYourPrice: data.is_set_price === false,
+    free: !!data.free_download,
+    preorder: !!data.is_preorder,
+    limit: typeof data.streaming_limit === "number" && data.streaming_limit > 0 ? data.streaming_limit : null,
+  };
 }
 
 /** Streamable tracks of a release, from a tralbum_details response. */

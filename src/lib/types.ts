@@ -101,12 +101,26 @@ export interface Item {
   released?: number | null;
   featured: Track | null;
   tracks: Track[] | null;
+  /** How the release is sold, from its tracklist; null when it can't be bought, undefined until loaded. */
+  buy?: Buy | null;
+}
+
+/** Price and terms of a release on Bandcamp. */
+export interface Buy {
+  /** The price, or the minimum when the buyer names their price. */
+  price: number;
+  currency: string;
+  nameYourPrice: boolean;
+  free: boolean;
+  preorder: boolean;
+  /** Full plays the artist allows before asking to buy (Bandcamp's streaming_limit). */
+  limit: number | null;
 }
 
 export type Mode = "track" | "album";
 
 /** Keys of Settings, as read from extension storage. */
-export const SETTINGS_KEYS = ["mode", "shuffle", "repeat", "artistOrder"] as const;
+export const SETTINGS_KEYS = ["mode", "shuffle", "repeat", "artistOrder", "plays", "nudgeOff"] as const;
 
 export interface Settings {
   mode: Mode;
@@ -115,6 +129,10 @@ export interface Settings {
   repeat: boolean;
   /** Order of an artist's releases. */
   artistOrder: ArtistOrder;
+  /** Full plays per track ("t<id>"), kept only in the browser for the buy reminder. */
+  plays: Record<string, number>;
+  /** Releases ("a<id>" / "t<id>") whose buy reminder was closed. */
+  nudgeOff: string[];
 }
 
 /** Messages the extension sends to the bandcamp.com content script. */
@@ -161,6 +179,10 @@ export interface PublicState {
       wishlisted: boolean;
       owned: boolean;
       tracks: (Track & { wishlisted: boolean })[] | null;
+      /** Null when it can't be bought or is already owned; undefined until the tracklist loads. */
+      buy: Buy | null | undefined;
+      /** Full plays of the most played track, when that reached the artist's limit; else null. */
+      nudge: { plays: number } | null;
     };
   } | null;
   queue: {
@@ -193,6 +215,7 @@ export type PlayerCommand =
   | { cmd: "setMode"; mode: Mode }
   | { cmd: "toggleWishlist"; itemIndex: number; trackId?: number }
   | { cmd: "dismissNotice" }
+  | { cmd: "dismissNudge" }
   | { cmd: "loadMore" }
   | { cmd: "getLyrics"; itemIndex: number; trackId: number }
   | { cmd: "getRecs"; url: string }

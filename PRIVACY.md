@@ -11,8 +11,11 @@ any personal data. It has no analytics and no servers of its own.
   tracklists, stream audio and, when you click a heart, add or remove an item
   in your Bandcamp wishlist. These requests go only to Bandcamp, using your
   existing Bandcamp session in the browser, exactly like Bandcamp's own pages.
-- **Browser storage** — your player settings (mode, shuffle) and, in Chrome, the
-  current queue so playback can resume. This data stays in your browser.
+- **Browser storage** — your player settings (mode, shuffle), how many times
+  you played each track to the end (by Bandcamp track id, for the "buy it"
+  reminder; the latest 2000 tracks), releases whose reminder you closed and, in
+  Chrome, the current queue so playback can resume. This data stays in your
+  browser and is never sent anywhere.
 - **Tabs** — to find open bandcamp.com tabs and the page you are viewing.
 
 ## Contact

@@ -533,6 +533,53 @@ describe("wishlist", () => {
   });
 });
 
+describe("buying", () => {
+  /** tralbum_details of a release sold for $7 that allows `limit` full plays. */
+  const soldApi = (limit: number | null = 3) => {
+    const api = defaultApi();
+    return (url: string, body?: unknown) => {
+      const d = api(url) as Record<string, unknown> | undefined;
+      return d && "tracks" in d ? { ...d, is_purchasable: true, is_set_price: true, price: 7, currency: "USD", streaming_limit: limit } : d;
+    };
+  };
+
+  it("shows the price once the tracklist is in", async () => {
+    const { player, view } = await setup({ capture: capture([1]), api: soldApi() });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.buy).toMatchObject({ price: 7, currency: "USD" }));
+  });
+
+  it("asks to buy after the artist's limit of full plays, until closed", async () => {
+    const { player, audio, view, settings } = await setup({ capture: capture([1]), api: soldApi(), settings: { plays: { t10: 2 } } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.buy).toBeTruthy());
+    expect(view().current!.release.nudge).toBeNull();
+
+    // A track played to its end counts.
+    audio.fire("ended");
+    await vi.waitFor(() => expect(view().current!.release.nudge).toEqual({ plays: 3 }));
+    expect(settings.plays).toEqual({ t10: 3 });
+
+    await player.handle({ cmd: "dismissNudge" });
+    expect(view().current!.release.nudge).toBeNull();
+    expect(settings.nudgeOff).toEqual(["a1"]);
+  });
+
+  it("uses Bandcamp's usual limit of 3 when the release has none", async () => {
+    const { player, view } = await setup({ capture: capture([1]), api: soldApi(null), settings: { plays: { t10: 3 } } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.nudge).toEqual({ plays: 3 }));
+  });
+
+  it("doesn't ask for releases that can't be bought", async () => {
+    const { player, view } = await setup({ capture: capture([1]), settings: { plays: { t10: 9 } } });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    await vi.waitFor(() => expect(view().current!.release.tracks).toBeTruthy());
+    expect(view().current!.release.buy).toBeNull();
+    expect(view().current!.release.nudge).toBeNull();
+  });
+});
+
 describe("snapshots", () => {
   it("resumes the same track at the same moment in a new player", async () => {
     const first = await setup({ capture: capture([1, 2]) });

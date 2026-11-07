@@ -467,11 +467,30 @@ a.bc-button { display: inline-flex; align-items: center; text-decoration: none; 
 .row .wish.on,
 .subtrack .wish.on { visibility: visible; }
 
+.rel-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 8px; }
+.buy-link { color: var(--link); font-size: 12px; font-weight: 700; text-decoration: none; }
+.buy-link:hover { text-decoration: underline; }
+
+.nudge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 2px;
+  padding: 8px 8px 8px 12px;
+  background: #eef7fa;
+  border: 1px solid #cfe6ee;
+  border-radius: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.nudge span { flex: 1; min-width: 0; }
+.nudge .close { flex: none; width: 18px; color: var(--muted); font-size: 16px; line-height: 1; }
+.nudge .close:hover { color: var(--text); }
+
 .wishlist-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 8px;
   color: var(--link);
   font-size: 12px;
 }

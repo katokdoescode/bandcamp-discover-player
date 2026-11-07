@@ -62,7 +62,7 @@ Plays the releases listed on a Bandcamp discover page, or all releases on an art
 ### Permission justifications
 
 - **tabs** — Finds the open bandcamp.com discover tab the user wants to play, and bandcamp.com tabs used to make requests with the user's Bandcamp session (tracklists, wishlist).
-- **storage** — Saves the player settings (mode, shuffle, repeat, artist release order) and the current queue, so playback can resume after Chrome closes the audio document.
+- **storage** — Saves the player settings (mode, shuffle, repeat, artist release order), play counts per track for the buy reminder, and the current queue, so playback can resume after Chrome closes the audio document.
 - **offscreen** — Manifest V3 service workers cannot play audio; an offscreen document with an `<audio>` element plays the tracks while the popup is closed.
 - **Host permission `*://*.bandcamp.com/*`** — Reads the discover page's release list and the band id on an artist's page, calls Bandcamp's own endpoints for tracklists, discographies and the wishlist, and reads lyrics and "you may also like" recommendations from release pages.
 - **Host permission `*://*.bcbits.com/*`** — Bandcamp's CDN for audio streams and cover art.
