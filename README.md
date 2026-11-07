@@ -13,7 +13,7 @@ player on a Bandcamp release page.
 ## Install
 
 - **Firefox:** [Discover Player for Bandcamp on addons.mozilla.org](https://addons.mozilla.org/addon/discover-player-for-bandcamp/)
-- **Chrome:** not in the Chrome Web Store yet. Install it from a GitHub release (see below).
+- **Chrome:** not in the Chrome Web Store yet. Install it from a GitHub release [(see below)](https://github.com/katokdoescode/bandcamp-discover-player#install-from-a-github-release-chrome).
 
 Then open any `bandcamp.com/discover/...` page and click the extension's toolbar icon.
 
