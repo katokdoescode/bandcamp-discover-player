@@ -6,8 +6,27 @@ import type { AudioEvent, AudioPort, BandcampTab, Player } from "./player";
 import type { PlayerCommand } from "./types";
 import { errorMessage } from "./util";
 
+/** Larger tracks (long mixes) are streamed as usual rather than held in memory. */
+const MAX_PRELOAD_BYTES = 40 * 1024 * 1024;
+
 export function htmlAudioPort(el: HTMLAudioElement): AudioPort {
   el.preload = "auto";
+  /** The next track, downloaded ahead: src → object URL once ready. */
+  let ahead: { src: string; url: string | null; abort: AbortController } | null = null;
+  /** The object URL the element is playing, freed when it moves on. */
+  let playingUrl: string | null = null;
+
+  const dropAhead = () => {
+    if (!ahead) return;
+    ahead.abort.abort();
+    if (ahead.url) URL.revokeObjectURL(ahead.url);
+    ahead = null;
+  };
+  const freePlaying = () => {
+    if (playingUrl) URL.revokeObjectURL(playingUrl);
+    playingUrl = null;
+  };
+
   return {
     get paused() {
       return el.paused;
@@ -25,11 +44,37 @@ export function htmlAudioPort(el: HTMLAudioElement): AudioPort {
       el.currentTime = v;
     },
     setSource(src) {
+      freePlaying();
+      if (ahead?.src === src && ahead.url) {
+        playingUrl = ahead.url;
+        ahead = null;
+        el.src = playingUrl;
+        return;
+      }
+      if (ahead?.src === src) dropAhead();
       el.src = src;
     },
     clear() {
+      freePlaying();
       el.removeAttribute("src");
       el.load();
+    },
+    preload(src) {
+      if (ahead?.src === src) return;
+      dropAhead();
+      const entry = { src, url: null as string | null, abort: new AbortController() };
+      ahead = entry;
+      void (async () => {
+        try {
+          const res = await fetch(src, { signal: entry.abort.signal });
+          const size = Number(res.headers.get("content-length")) || 0;
+          if (!res.ok || size > MAX_PRELOAD_BYTES) return entry.abort.abort();
+          const blob = await res.blob();
+          if (ahead === entry) entry.url = URL.createObjectURL(blob);
+        } catch {
+          // Not downloaded: the track streams as usual when it starts.
+        }
+      })();
     },
     play: () => el.play(),
     pause: () => el.pause(),

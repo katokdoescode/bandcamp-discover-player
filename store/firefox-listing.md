@@ -83,6 +83,10 @@ The content script on bandcamp.com uses `content.fetch` to make same-origin requ
 
 ## Release notes
 
+### 1.1.2
+
+Playback with the phone locked (Firefox for Android): the player loads the next releases and downloads the next track while Bandcamp still answers, so it plays on when the phone freezes the bandcamp.com tab. If the tab doesn't answer, the player waits where it stopped instead of skipping the rest of the list, and goes on once the tab wakes up or you press play.
+
 ### 1.1.1
 
 When Bandcamp asks to confirm you're not a bot, the player says so and what to do, instead of a "JSON.parse" error, and tries your other bandcamp.com tabs first.

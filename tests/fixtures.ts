@@ -109,6 +109,8 @@ export class FakeAudio implements AudioPort {
   duration = 0;
   currentTime = 0;
   src = "";
+  /** Tracks downloaded ahead, in order. */
+  preloaded: string[] = [];
   private handlers = new Map<AudioEvent, (() => void)[]>();
 
   get hasSource() {
@@ -120,6 +122,9 @@ export class FakeAudio implements AudioPort {
   }
   clear() {
     this.src = "";
+  }
+  preload(src: string) {
+    this.preloaded.push(src);
   }
   async play() {
     this.paused = false;

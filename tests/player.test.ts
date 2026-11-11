@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { OWN_MARK } from "@/lib/bandcamp";
-import { Player } from "@/lib/player";
+import { Player, RETRY_EVERY, TAB_TIMEOUT } from "@/lib/player";
 import { ARTIST, artistApi, capture, defaultApi, details, disco, recsPage, result, setup, trackPage, trackUrl } from "./fixtures";
 
 const TAB = 7;
@@ -479,6 +479,102 @@ describe("expired stream links", () => {
 
     audio.fire("error");
     await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/20"));
+  });
+});
+
+describe("a locked phone", () => {
+  /** Album mode through the tab proxy; release ids in `asleep` never answer, like a frozen tab. */
+  async function lockedSetup(asleep: Set<number>, fail: Record<number, string> = {}) {
+    const api = defaultApi();
+    return setup({
+      capture: capture([1, 2, 3]),
+      settings: { mode: "album" },
+      api: () => undefined,
+      proxy: (url) => {
+        const id = Number(/tralbum_id=(\d+)/.exec(url)?.[1]);
+        if (fail[id]) throw new Error(fail[id]);
+        return asleep.has(id) ? new Promise(() => {}) : api(url);
+      },
+    });
+  }
+
+  const endTrack = async (audio: { fire(e: "ended"): void }) => {
+    audio.fire("ended");
+    await vi.advanceTimersByTimeAsync(0);
+  };
+
+  it("loads the next releases and downloads the next track while Bandcamp answers", async () => {
+    vi.useFakeTimers();
+    try {
+      const { player, audio, sent } = await lockedSetup(new Set());
+      await player.handle({ cmd: "loadFromTab", tabId: TAB });
+      await vi.advanceTimersByTimeAsync(0);
+
+      const loaded = sent.flatMap((m) => (m.type === "apiFetch" ? [/tralbum_id=(\d+)/.exec(m.url)?.[1]] : []));
+      expect(new Set(loaded)).toEqual(new Set(["1", "2", "3"]));
+      expect(audio.preloaded).toEqual(["https://stream/11?fresh=0"]);
+
+      await endTrack(audio);
+      await endTrack(audio);
+      // The last track of release 1 is playing: release 2 comes next.
+      expect(playing(audio)).toBe("https://stream/12?fresh=0");
+      expect(audio.preloaded.at(-1)).toBe("https://stream/20?fresh=0");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits where a frozen tab didn't answer instead of skipping releases, then goes on", async () => {
+    vi.useFakeTimers();
+    try {
+      const asleep = new Set([2, 3]);
+      const { player, audio, view } = await lockedSetup(asleep);
+      await player.handle({ cmd: "loadFromTab", tabId: TAB });
+      await vi.advanceTimersByTimeAsync(TAB_TIMEOUT * 3);
+
+      for (let i = 0; i < 3; i++) await endTrack(audio);
+      await vi.advanceTimersByTimeAsync(TAB_TIMEOUT);
+      expect(audio.paused).toBe(true);
+      expect(playing(audio)).toBe("https://stream/12?fresh=0");
+      expect(view().error).toMatch(/didn't answer/);
+
+      asleep.clear();
+      await vi.advanceTimersByTimeAsync(RETRY_EVERY);
+      expect(playing(audio)).toBe("https://stream/20?fresh=0");
+      expect(audio.paused).toBe(false);
+      expect(view().error).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("play tries again at once", async () => {
+    vi.useFakeTimers();
+    try {
+      const asleep = new Set([2]);
+      const { player, audio } = await lockedSetup(asleep);
+      await player.handle({ cmd: "loadFromTab", tabId: TAB });
+      for (let i = 0; i < 3; i++) await endTrack(audio);
+      await vi.advanceTimersByTimeAsync(TAB_TIMEOUT * 2);
+      expect(audio.paused).toBe(true);
+
+      asleep.clear();
+      await player.handle({ cmd: "togglePlay" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(playing(audio)).toBe("https://stream/20?fresh=0");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still skips a release that Bandcamp says is gone", async () => {
+    const { player, audio } = await lockedSetup(new Set(), { 2: "HTTP 404" });
+    await player.handle({ cmd: "loadFromTab", tabId: TAB });
+    for (let i = 0; i < 3; i++) {
+      audio.fire("ended");
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    await vi.waitFor(() => expect(playing(audio)).toBe("https://stream/30?fresh=0"));
   });
 });
 
