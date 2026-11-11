@@ -56,6 +56,11 @@ export interface AudioPort {
   play(): Promise<void>;
   pause(): void;
   on(event: AudioEvent, fn: () => void): void;
+  /**
+   * Downloads a track that is likely to play next, so starting it later needs no network.
+   * A later setSource with the same src plays the downloaded copy.
+   */
+  preload?(src: string): void;
 }
 
 export interface BandcampTab {
@@ -115,6 +120,34 @@ type Pick = "first" | "last" | number;
 const DEFAULT_PLAY_LIMIT = 3;
 const MAX_PLAYS = 2000;
 const MAX_NUDGE_OFF = 500;
+/** How long a Bandcamp tab gets to answer: a frozen tab (a locked phone) never does. */
+export const TAB_TIMEOUT = 15_000;
+/** Releases ahead of the current one whose tracklists are loaded while Bandcamp is reachable. */
+const PREFETCH_AHEAD = 3;
+/** While Bandcamp can't be reached, the player keeps its place and tries again this often. */
+export const RETRY_EVERY = 30_000;
+const MAX_RETRIES = 40;
+
+/**
+ * Bandcamp couldn't be asked at all: no tab, a frozen or unloaded tab, the bot check, a
+ * rate limit. Says nothing about the release, so playback waits instead of skipping it.
+ */
+export class UnreachableError extends Error {}
+
+/** Only a 4xx answer (other than 429) is about the release itself. */
+function isUnreachable(e: unknown): boolean {
+  return e instanceof UnreachableError || !/^HTTP 4(?!29)\d\d$/.test(errorMessage(e));
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new UnreachableError(message)), ms);
+    p.then(
+      (v) => (clearTimeout(timer), resolve(v)),
+      (e) => (clearTimeout(timer), reject(e)),
+    );
+  });
+}
 
 export class Player {
   private source: Source | null = null;
@@ -141,6 +174,10 @@ export class Player {
   /** Bumps on every play request, so stale async work can bail out. */
   private playGen = 0;
   private retried = false;
+  /** Where playback stopped because Bandcamp couldn't be reached; resumed by a retry or by play. */
+  private waiting: { pos: number; pick: Pick; direction: 1 | -1; tries: number } | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private preloaded: string | null = null;
   /** Lyrics by track id; null when the track page has none. */
   private lyrics = new Map<number, string | null>();
   /** "You may also like" by release page url. */
@@ -255,16 +292,21 @@ export class Player {
     const direct = await this.env.fetchJson(url, body).catch(() => undefined);
     if (direct !== undefined) return direct as T;
     const tabs = await this.bandcampComTabs();
-    if (!tabs.length) throw new Error("Bandcamp is not reachable. Open any bandcamp.com page and try again.");
+    if (!tabs.length) throw new UnreachableError("Bandcamp is not reachable. Open any bandcamp.com page and try again.");
     // A tab that hasn't passed Bandcamp's bot check gets a page instead of JSON: try the others.
     let error: unknown;
     for (const tab of tabs) {
       try {
-        return await this.env.sendToTab<T>(tab.id, { type: "apiFetch", url, method: body ? "POST" : "GET", body });
+        return await withTimeout(
+          this.env.sendToTab<T>(tab.id, { type: "apiFetch", url, method: body ? "POST" : "GET", body }),
+          TAB_TIMEOUT,
+          "The bandcamp.com tab didn't answer. It may be asleep: open it and playback goes on.",
+        );
       } catch (e) {
         error = e;
       }
     }
+    if (isUnreachable(error) && !(error instanceof UnreachableError)) throw new UnreachableError(errorMessage(error));
     throw error;
   }
 
@@ -412,8 +454,9 @@ export class Player {
     return (pick === "last" ? tracks[tracks.length - 1] : tracks[0]) ?? null;
   }
 
-  private async playPos(pos: number, pick: Pick = "first", direction: 1 | -1 = 1): Promise<void> {
+  private async playPos(pos: number, pick: Pick = "first", direction: 1 | -1 = 1, tries = 0): Promise<void> {
     const gen = ++this.playGen;
+    this.clearWaiting();
     // Skip releases that have nothing streamable, in the direction of travel.
     while (pos >= 0) {
       if (pos >= this.order.length - 2 && !this.exhausted) {
@@ -426,16 +469,18 @@ export class Player {
       try {
         track = await this.trackFor(this.itemAt(itemIndex), pick);
       } catch (e) {
+        if (gen !== this.playGen) return;
         this.error = errorMessage(e);
+        // Bandcamp didn't answer (a locked phone freezes the tab): hold this place, don't skip.
+        if (isUnreachable(e)) return this.wait(pos, pick, direction, tries);
       }
       if (gen !== this.playGen) return;
       if (track) {
         this.pos = pos;
         this.current = { itemIndex, track };
+        if (tries) this.error = null;
         this.startAudio(track.stream);
-        // Discover's featured track says nothing about lyrics: the tracklist does.
-        const item = this.itemAt(itemIndex);
-        if (!item.tracks) this.loadTracks(item).then(() => this.broadcast(), () => {});
+        void this.prefetch(gen);
         return;
       }
       pos += direction;
@@ -444,6 +489,84 @@ export class Player {
     // Ran off either end of the queue.
     this.env.audio.pause();
     this.broadcast();
+  }
+
+  /** Stops where Bandcamp couldn't be reached and tries again a little later. */
+  private wait(pos: number, pick: Pick, direction: 1 | -1, tries: number): void {
+    this.env.audio.pause();
+    this.waiting = { pos, pick, direction, tries };
+    if (tries < MAX_RETRIES) {
+      const gen = this.playGen;
+      this.retryTimer = setTimeout(() => {
+        const w = this.waiting;
+        if (w && gen === this.playGen) void this.playPos(w.pos, w.pick, w.direction, w.tries + 1);
+      }, RETRY_EVERY);
+    }
+    this.broadcast();
+  }
+
+  private clearWaiting(): void {
+    this.waiting = null;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  /**
+   * While Bandcamp answers, loads what comes next: tracklists of the next releases, the
+   * next page of results, and the next track's audio. A phone that locks later then
+   * plays on without asking the (by then frozen) bandcamp.com tab.
+   */
+  private async prefetch(gen: number): Promise<void> {
+    try {
+      const item = this.current && this.itemAt(this.current.itemIndex);
+      // Discover's featured track says nothing about lyrics or the rest of the release: the tracklist does.
+      if (item && !item.tracks) {
+        await this.loadTracks(item);
+        this.broadcast();
+      }
+      if (gen !== this.playGen) return;
+      this.preloadNext();
+      for (let i = 1; i <= PREFETCH_AHEAD; i++) {
+        if (this.pos + i >= this.order.length - 2 && !this.exhausted && !this.loading) await this.fetchNextPage();
+        if (gen !== this.playGen) return;
+        const index = this.order[this.pos + i];
+        if (index == null) break;
+        const next = this.itemAt(index);
+        if (this.playMode === "album" || !next.featured) await this.loadTracks(next);
+        if (gen !== this.playGen) return;
+        if (i === 1) this.preloadNext();
+      }
+    } catch {
+      // Best effort: playback asks again when it gets there.
+    }
+  }
+
+  /** Downloads the track that plays after the current one, when it is already known. */
+  private preloadNext(): void {
+    const next = this.peekNext();
+    if (!next || next.stream === this.preloaded) return;
+    this.preloaded = next.stream;
+    this.env.audio.preload?.(next.stream);
+  }
+
+  /** The track next() will play, without loading anything; null when not known yet. */
+  private peekNext(): Track | null {
+    const cur = this.current;
+    if (!cur) return null;
+    const item = this.itemAt(cur.itemIndex);
+    if (this.playMode === "album" && item.tracks) {
+      const idx = item.tracks.findIndex((t) => t.id === cur.track.id);
+      const following = idx >= 0 ? item.tracks[idx + 1] : undefined;
+      if (following) return following;
+      if (this.repeat && idx >= 0) return item.tracks[0] ?? null;
+    }
+    for (let pos = this.pos + 1; pos < this.order.length; pos++) {
+      const next = this.itemAt(this.order[pos]!);
+      if (this.playMode === "track" && next.featured) return next.featured;
+      if (!next.tracks) return null;
+      if (next.tracks.length) return next.tracks[0]!;
+    }
+    return null;
   }
 
   private startAudio(src: string, at = 0): void {
@@ -581,6 +704,12 @@ export class Player {
 
   togglePlay(): void {
     const a = this.env.audio;
+    // Stopped while Bandcamp couldn't be reached: play means "try again now".
+    if (this.waiting) {
+      const w = this.waiting;
+      void this.playPos(w.pos, w.pick, w.direction, w.tries + 1);
+      return;
+    }
     if (!this.current) {
       if (this.order.length) void this.playPos(0);
       return;
@@ -597,6 +726,7 @@ export class Player {
 
   private stop(): void {
     this.playGen++;
+    this.clearWaiting();
     this.env.audio.pause();
     this.env.audio.clear();
   }
